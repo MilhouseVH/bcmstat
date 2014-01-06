@@ -1,7 +1,7 @@
 bcmstat
 =======
 
-Simple Raspberry Pi monitoring tool:
+Simple Raspberry Pi command line monitoring tool:
 
 * CPU fequencies (ARM, Core, h264)
 * IRQ/s

@@ -97,11 +97,13 @@ def readfile(infile):
   else:
     return ""
 
-def grep(match_string, input_string, field=None, head=None, tail=None, split_char=" "):
-  lines = []
-  maxlines = None
+def grep(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=True):
 
-  for line in [x for x in input_string.split("\n") if re.search(match_string, x)]:
+  re_flags = 0 if case_sensitive else re.IGNORECASE
+
+  lines = []
+
+  for line in [x for x in input_string.split("\n") if re.search(match_string, x, flags=re_flags)]:
     aline = re.sub("%s+" % split_char, split_char, line.strip()).split(split_char)
     if field != None:
       if len(aline) > field:
@@ -119,8 +121,8 @@ def grep(match_string, input_string, field=None, head=None, tail=None, split_cha
   return "\n".join(lines)
 
 # grep -v - return everything but the match string
-def grepv(match_string, input_string, field=None, head=None, tail=None, split_char=" "):
-  return grep(r"^((?!%s).)*$" % match_string, input_string, field, head, tail, split_char)
+def grepv(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=False):
+  return grep(r"^((?!%s).)*$" % match_string, input_string, field, head, tail, split_char, case_sensitive)
 
 def tobytes(value):
   if value[-1:] == "M":
@@ -503,12 +505,16 @@ def downloadLatestVersion(args, autoupdate=False, forceupdate=False):
 def get_latest_version():
   global GITHUB, ANALYTICS, VERSION
 
+  DIST = "Other"
   if os.path.exists("/etc/openelec-release"):
     DIST = "OpenELEC"
-  elif os.path.exists("/boot"):
-    DIST = "Raspbian" if grep("Raspbian", readfile("/etc/issue")) != "" else "Raspbmc"
   else:
-    DIST = "Other"
+    etc_issue = readfile("/etc/issue")
+    if etc_issue:
+      if grep("raspbian", etc_issue, head=1, case_sensitive=False):
+        DIST = "Raspbian"
+      elif grep("raspbmc", etc_issue, head=1, case_sensitive=False):
+        DIST = "Raspbmc"
 
   # Need user agent etc. for analytics
   user_agent = "Mozilla/5.0 (%s; %s_%s; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
@@ -580,7 +586,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.0.6"
+  VERSION = "0.0.7"
 
   INTERFACE = "eth0"
   DELAY = 2
