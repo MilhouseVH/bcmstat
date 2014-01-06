@@ -493,8 +493,8 @@ def downloadLatestVersion(args, autoupdate=False, forceupdate=False):
     THISFILE.close()
   except:
     if autoupdate:
-      printlog("NOTICE - A new version (v%s) of this script is available." % remoteVersion)
-      printlog("NOTICE - Use the \"U\" option to apply update.")
+      printout("NOTICE - A new version (v%s) of this script is available." % remoteVersion)
+      printout("NOTICE - Use the \"U\" option to apply update.")
     else:
       printerr("FATAL: Unable to update current file, check you have write access")
     return False
