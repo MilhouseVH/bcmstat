@@ -4,6 +4,7 @@ bcmstat
 Simple Raspberry Pi command line monitoring tool:
 
 * CPU fequencies (ARM, Core, h264)
+* Temperature (current and peak)
 * IRQ/s
 * Network Rx/Tx
 * GPU mem usage
