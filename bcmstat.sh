@@ -186,7 +186,7 @@ def getCPULoad(storage, ):
 
 def getNetwork(storage, interface):
   storage[2] = storage[1]
-  storage[1] = (time.time(), grep(interface, readfile("/proc/net/dev")))
+  storage[1] = (time.time(), grep("^[ ]*%s:" % interface, readfile("/proc/net/dev")))
 
   if storage[2][0] != 0:
     s1 = storage[1]
@@ -586,7 +586,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.0.7"
+  VERSION = "0.0.8"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -733,6 +733,10 @@ def main(args):
   getBCM2835(BCM)
   getIRQ(IRQ)
   getNetwork(NET, INTERFACE)
+
+  if not NET[1][1]:
+    printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
+    sys.exit(2)
 
   if STATS_CPU_MEM:
     getCPULoad(CPU)
