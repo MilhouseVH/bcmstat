@@ -13,3 +13,9 @@ Simple Raspberry Pi command line monitoring tool:
 
 Values can be coloured (white, green, amber and red) to highlight excess usage or resource depletion.
 
+View available options with -h.
+
+Specify a default configuration in ~/.bcmstat.conf, eg:
+```
+xgcd10
+```
