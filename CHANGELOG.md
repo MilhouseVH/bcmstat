@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.0.9 (23/01/2014)
+* Fix: Show correct Core/SDRAM frequency when not overclocked (or when underclocked)
+* Add: Min/Max H264 frequency
+
 ##Version 0.0.8 (21/01/2014)
 * Chg: Small change to filter on interface data, making it less likely to be ambiguous
 * Chg: Improve interface name validation

@@ -29,7 +29,7 @@
 #
 # Default is to run at lowest possible priority (maximum niceness, +19),
 # but this can mean slow responses. To ensure more timely responses, use N
-# to run at default/normal priority (ie. don't re-nice), or P to run at
+# to run at default/normal priority (ie. don't re-nice), or M to run at
 # maximum priority (and minimum niceness, -20).
 #
 ################################################################################
@@ -85,6 +85,13 @@ def vcgencmd(args, split=True):
     return grep("", runcommand("%s %s" % (VCGENCMD, args)), 1, split_char="=")
   else:
     return runcommand("%s %s" % (VCGENCMD, args))
+
+def vcgencmd_items(args, isInt=False):
+  d = {}
+  for l in [x.split("=") for x in vcgencmd(args, split=False).split("\n")]:
+    d[l[0]] = int(l[1]) if isInt else l[1]
+
+  return d
 
 def vcdbg(args):
   global VCDBGCMD, SUDO
@@ -288,8 +295,8 @@ def getGPUMem(storage):
 
   storage[0] = (time.time(), [freemem, bfreemem, int(percent_free), GPU_ALLOCATED])
 
-def ShowConfig(nice_value, priority_desc):
-  global VCGENCMD
+def ShowConfig(nice_value, priority_desc, args):
+  global VCGENCMD, VERSION
 
   BOOT_DIR = grep("mmcblk0p1", runcommand("mount"), field=2)
   CONFIG_TXT = readfile("%s/config.txt" % BOOT_DIR)
@@ -298,29 +305,39 @@ def ShowConfig(nice_value, priority_desc):
 
   MEM_MAX = 512 if int(re.sub(".*: ", "", grep("Revision", readfile("/proc/cpuinfo")))[-4:],16) > 10 else 256
 
-  MEM_GPU_XXX = grep("^[   ]*gpu_mem_%s[ =]" % MEM_MAX, CONFIG_TXT, 1, split_char="=")
-  MEM_GPU_GLB = grep("^[   ]*gpu_mem[ =]", CONFIG_TXT, 1, split_char="=")
+  MEM_GPU_XXX = grep("^[ ]*gpu_mem_%s[ =]" % MEM_MAX, CONFIG_TXT, 1, split_char="=")
+  MEM_GPU_GLB = grep("^[ ]*gpu_mem[ =]", CONFIG_TXT, 1, split_char="=")
   if not MEM_GPU_GLB: MEM_GPU_GLB = 64
   MEM_GPU = MEM_GPU_XXX if MEM_GPU_XXX else MEM_GPU_GLB
   MEM_ARM = "%d" % (int(MEM_MAX) - int(MEM_GPU))
 
+  VCG_INT    = vcgencmd_items("get_config int", isInt=True)
+
   GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
   ARM_MIN    = int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))
   ARM_MAX    = int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))
-  ARM_VOLT   = int(vcgencmd("get_config over_voltage"))
-  CORE_MAX   = int(vcgencmd("get_config core_freq"))
-  SDRAM_MAX  = int(vcgencmd("get_config sdram_freq"))
-  SDRAM_VOLT = int(vcgencmd("get_config over_voltage_sdram"))
+  CORE_MAX   = VCG_INT.get("core_freq",250)
+  H264_MAX   = VCG_INT.get("h264_freq", 250)
+  SDRAM_MAX  = VCG_INT.get("sdram_freq", 400)
+  ARM_VOLT   = VCG_INT.get("over_voltage", 0)
+  SDRAM_VOLT = VCG_INT.get("over_voltage_sdram", 0)
+  TEMP_LIMIT = VCG_INT.get("temp_limit", 85)
+  FORCE_TURBO= (VCG_INT.get("force_turbo", 0) != 0)
   vCore      = vcgencmd("measure_volts core")
   vRAM       = vcgencmd("measure_volts sdram_c")
-  TEMP_LIMIT = vcgencmd("get_config temp_limit")
-  VER        = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
+  FIRMWARE   = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
 
-  OTHER_VARS = "TEMP_LIMIT=%sC" % TEMP_LIMIT
-  if vcgencmd("get_config force_turbo") == "1":
-    OTHER_VARS = "%s, FORCE_TURBO" % OTHER_VARS
-  if vcgencmd("get_config current_limit_override") == "0x5a000020":
-    OTHER_VARS = "%s, CURRENT_LIMIT_OVERRIDE" % OTHER_VARS
+  OTHER_VARS = ["temp_limit=%d" % TEMP_LIMIT]
+  for item in ["force_turbo", "initial_turbo", "avoid_pwm_pll",
+               "hdmi_force_hotplug", "hdmi_force_edid_audio", "no_hdmi_resample"]:
+    if VCG_INT.get(item, 0) != 0:
+      OTHER_VARS.append("%s=%d" % (item, VCG_INT.get(item, 0)))
+
+  if FORCE_TURBO:
+    CORE_MIN = CORE_MAX
+  else:
+    CORE_MIN = 250
+    CORE_MIN = CORE_MAX if CORE_MAX < CORE_MIN else CORE_MIN
 
   CODECS = []
   for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG", "DTS", "DDP"]:
@@ -328,28 +345,45 @@ def ShowConfig(nice_value, priority_desc):
       CODECS.append(codec)
   CODECS = CODECS if CODECS else ["none"]
 
+  nv = "%s%d" % ("+" if nice_value > 0 else "", nice_value)
+
+  print("  Config: v%s, args \"%s\", priority %s (%s)" % (VERSION, " ".join(args), priority_desc, nv))
   print("Governor: %s" % GOV)
-  print("  Memory: %sMB (%sMB ARM, %sMB GPU)" % (MEM_MAX, MEM_ARM, MEM_GPU))
-  print("Min Freq: %4dMhz | %4dMhz | %4dMhz" % (int(ARM_MIN/1000), 250, SDRAM_MAX))
-  print("Max Freq: %4dMhz | %4dMhz | %4dMhz" % (int(ARM_MAX/1000), CORE_MAX, SDRAM_MAX))
+  print("  Memory: %sMB (split %sMB ARM, %sMB GPU)" % (MEM_MAX, MEM_ARM, MEM_GPU))
+  print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(7), "H264".center(7), "SDRAM".center(9)))
+  print("Min Freq: | %4dMhz | %4dMhz | %4dMhz |  %4dMhz  |" % (int(ARM_MIN/1000), CORE_MIN,        0, SDRAM_MAX))
+  print("Max Freq: | %4dMhz | %4dMhz | %4dMhz |  %4dMhz  |" % (int(ARM_MAX/1000), CORE_MAX, H264_MAX, SDRAM_MAX))
 
   v1 = "%d, %s" % (ARM_VOLT, vCore)
   v2 = "%d, %s" % (SDRAM_VOLT, vRAM)
-  if ARM_VOLT == 0: v1 = " %s" % v1
-  if ARM_VOLT > 0:  v1 = "+%s" % v1
-  if SDRAM_VOLT == 0: v2 = " %s" % v2
-  if SDRAM_VOLT > 0:  v2 = "+%s" % v2
-  print("Voltages:      %s    | %s" % (v1, v2))
+  v1 = "+%s" % v1 if ARM_VOLT > 0 else v1
+  v2 = "+%s" % v2 if SDRAM_VOLT > 0 else v2
+  print("Voltages: | %s | %s |" % (v1.center(27), v2.center(9)))
 
-  print("   Other: %s" % OTHER_VARS)
-  print(" Version: %s" % VER)
-  print("vcg path: %s" % VCGENCMD)
+  # Chop "Other" properties up into multiple lines of limited length strings
+  line = ""
+  lines = []
+  for item in OTHER_VARS:
+    if (len(line) + len(item)) <= 80:
+      line = item if line == "" else "%s, %s" % (line, item)
+    else:
+      lines.append(line)
+      line = ""
+  if line: lines.append(line)
+  c=0
+  for l in lines:
+    c += 1
+    if c == 1:
+      print("   Other: %s" % l)
+    else:
+      print("          %s" % l)
+
+  print("Firmware: %s" % FIRMWARE)
   print("  Codecs: %s" % " ".join(CODECS))
-  print("  Booted: %s" % BOOTED)
-  printn("Priority: %s (%s%d)" % (priority_desc, "+" if nice_value > 0 else "", nice_value))
+  printn("  Booted: %s" % BOOTED)
 
 def ShowHeadings(STATS_CPU_MEM, STATS_GPU):
-  HDR1 = "Time          ARM     Core     h264  Core Temp (Max)   IRQ/s      RX B/s      TX B/s"
+  HDR1 = "Time          ARM     Core     H264  Core Temp (Max)   IRQ/s      RX B/s      TX B/s"
   HDR2 = "========  =======  =======  =======  ===============  ======  ==========  =========="
 
   if STATS_GPU:
@@ -407,9 +441,9 @@ def ShowHelp():
   print("d #      Specify interval (in seconds) between each iteration - default is 2")
   print("H #      Header every n iterations (0 = no header, default is 30)")
   print("i iface  Monitor network interface other than the default eth0, eg. br1")
-  print("L        Run with lowest priority (nice +20)")
-  print("N        Run with normal priority (nice 0)")
-  print("M        Run with highest possible priority (nice -20)")
+  print("L        Run at lowest priority (nice +20)")
+  print("N        Run at normal priority (nice 0)")
+  print("M        Run at maximum priority (nice -20)")
   print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats")
   print("s/S      Do (s)/don/t (S) include any available swap memory when calculating memory statistics")
@@ -424,7 +458,7 @@ def ShowHelp():
   print()
   print("Set default properties in ~/.bcmstat.conf")
   print()
-  print("Note: Default behaviour is to run at lowest possible priority (nice +19), unless N or P specified.")
+  print("Note: Default behaviour is to run at lowest possible priority (nice +19), unless N or M specified.")
 
 
 #===================
@@ -586,7 +620,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.0.8"
+  VERSION = "0.0.9"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -707,11 +741,11 @@ def main(args):
 
   # Renice self
   if NICE_ADJUST < 0:
-    PRIO_D = "Highest"
+    PRIO_D = "maximum"
   elif NICE_ADJUST == 0:
-    PRIO_D = "Normal"
+    PRIO_D = "normal"
   else:
-    PRIO_D = "Lowest"
+    PRIO_D = "lowest"
 
   try:
     NICE_V = os.nice(NICE_ADJUST)
@@ -720,7 +754,7 @@ def main(args):
     NICE_V = os.nice(0)
 
   if not QUIET:
-    ShowConfig(NICE_V, PRIO_D)
+    ShowConfig(NICE_V, PRIO_D, args)
 
   #       -Delta-   -Current-  -Previous-
   IRQ = [(0, None), (0, None), (0, None)]
