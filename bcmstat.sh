@@ -350,15 +350,15 @@ def ShowConfig(nice_value, priority_desc, args):
   print("  Config: v%s, args \"%s\", priority %s (%s)" % (VERSION, " ".join(args), priority_desc, nv))
   print("Governor: %s" % GOV)
   print("  Memory: %sMB (split %sMB ARM, %sMB GPU)" % (MEM_MAX, MEM_ARM, MEM_GPU))
-  print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(7), "H264".center(7), "SDRAM".center(9)))
-  print("Min Freq: | %4dMhz | %4dMhz | %4dMhz |  %4dMhz  |" % (int(ARM_MIN/1000), CORE_MIN,        0, SDRAM_MAX))
-  print("Max Freq: | %4dMhz | %4dMhz | %4dMhz |  %4dMhz  |" % (int(ARM_MAX/1000), CORE_MAX, H264_MAX, SDRAM_MAX))
+  print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(6), "H264".center(6), "SDRAM".center(9)))
+  print("Min Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MIN/1000), CORE_MIN,        0, SDRAM_MAX))
+  print("Max Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MAX/1000), CORE_MAX, H264_MAX, SDRAM_MAX))
 
   v1 = "%d, %s" % (ARM_VOLT, vCore)
   v2 = "%d, %s" % (SDRAM_VOLT, vRAM)
   v1 = "+%s" % v1 if ARM_VOLT > 0 else v1
   v2 = "+%s" % v2 if SDRAM_VOLT > 0 else v2
-  print("Voltages: | %s | %s |" % (v1.center(27), v2.center(9)))
+  print("Voltages: | %s | %s |" % (v1.center(25), v2.center(9)))
 
   # Chop "Other" properties up into multiple lines of limited length strings
   line = ""
