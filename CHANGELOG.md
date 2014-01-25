@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.0 (25/01/2014)
+* Add: Include Swap allocation (if swap is enabled) in summary information
+
 ##Version 0.0.9 (23/01/2014)
 * Fix: Show correct Core/SDRAM frequency when not overclocked (or when underclocked)
 * Add: Min/Max H264 frequency

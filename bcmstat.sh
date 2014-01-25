@@ -104,7 +104,7 @@ def readfile(infile):
   else:
     return ""
 
-def grep(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=True):
+def grep(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=True, defaultvalue=None):
 
   re_flags = 0 if case_sensitive else re.IGNORECASE
 
@@ -125,7 +125,10 @@ def grep(match_string, input_string, field=None, head=None, tail=None, split_cha
   if head: lines = lines[:head]
   if tail: lines = lines[-tail:]
 
-  return "\n".join(lines)
+  if defaultvalue and lines == []:
+    return defaultvalue
+  else:
+    return "\n".join(lines)
 
 # grep -v - return everything but the match string
 def grepv(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=False):
@@ -295,6 +298,9 @@ def getGPUMem(storage):
 
   storage[0] = (time.time(), [freemem, bfreemem, int(percent_free), GPU_ALLOCATED])
 
+def ceildiv(a, b):
+  return -(-a // b)
+
 def ShowConfig(nice_value, priority_desc, args):
   global VCGENCMD, VERSION
 
@@ -310,6 +316,8 @@ def ShowConfig(nice_value, priority_desc, args):
   if not MEM_GPU_GLB: MEM_GPU_GLB = 64
   MEM_GPU = MEM_GPU_XXX if MEM_GPU_XXX else MEM_GPU_GLB
   MEM_ARM = "%d" % (int(MEM_MAX) - int(MEM_GPU))
+
+  SWAP_TOTAL = int(grep("SwapTotal", readfile("/proc/meminfo"), field=1, defaultvalue="0"))
 
   VCG_INT    = vcgencmd_items("get_config int", isInt=True)
 
@@ -347,9 +355,11 @@ def ShowConfig(nice_value, priority_desc, args):
 
   nv = "%s%d" % ("+" if nice_value > 0 else "", nice_value)
 
+  SWAP_MEM = "" if SWAP_TOTAL == 0 else " plus %dMB Swap" % int(ceildiv(SWAP_TOTAL, 1024))
+
   print("  Config: v%s, args \"%s\", priority %s (%s)" % (VERSION, " ".join(args), priority_desc, nv))
   print("Governor: %s" % GOV)
-  print("  Memory: %sMB (split %sMB ARM, %sMB GPU)" % (MEM_MAX, MEM_ARM, MEM_GPU))
+  print("  Memory: %sMB (split %sMB ARM, %sMB GPU)%s" % (MEM_MAX, MEM_ARM, MEM_GPU, SWAP_MEM))
   print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(6), "H264".center(6), "SDRAM".center(9)))
   print("Min Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MIN/1000), CORE_MIN,        0, SDRAM_MAX))
   print("Max Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MAX/1000), CORE_MAX, H264_MAX, SDRAM_MAX))
@@ -620,7 +630,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.0.9"
+  VERSION = "0.1.0"
 
   INTERFACE = "eth0"
   DELAY = 2
