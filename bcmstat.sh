@@ -265,15 +265,20 @@ def getMemory(storage, include_swap):
 
   MEMUSED = (1-(float(MEMFREE)/float(MEMTOTAL)))*100
 
+  if SWAPTOTAL != 0:
+    SWAPUSED = (1-(float(SWAPFREE)/float(SWAPTOTAL)))*100
+  else:
+    SWAPUSED = None
+
   storage[2] = storage[1]
-  storage[1] = (time.time(), [MEMTOTAL, MEMFREE, MEMUSED])
+  storage[1] = (time.time(), [MEMTOTAL, MEMFREE, MEMUSED, SWAPUSED])
 
   if storage[2][0] != 0:
     s1 = storage[1]
     s2 = storage[2]
     dTime = s1[0] - s2[0]
     dTime = 1 if dTime <= 0 else dTime
-    storage[0] = (dTime, [s1[1][0], s1[1][1], s1[1][2], s1[1][2] - s2[1][2]])
+    storage[0] = (dTime, [s1[1][0], s1[1][1], s1[1][2], s1[1][2] - s2[1][2], s1[1][3]])
 
 def getGPUMem(storage):
   global GPU_ALLOCATED
@@ -392,17 +397,20 @@ def ShowConfig(nice_value, priority_desc, args):
   print("  Codecs: %s" % " ".join(CODECS))
   printn("  Booted: %s" % BOOTED)
 
-def ShowHeadings(STATS_CPU_MEM, STATS_GPU):
+def ShowHeadings(STATS_CPU_MEM, STATS_GPU, SWAP_ENABLED):
   HDR1 = "Time          ARM     Core     H264  Core Temp (Max)   IRQ/s      RX B/s      TX B/s"
   HDR2 = "========  =======  =======  =======  ===============  ======  ==========  =========="
 
   if STATS_GPU:
-      HDR1 = "%s  GPUMem Free" % HDR1
-      HDR2 = "%s  ===========" % HDR2
+    HDR1 = "%s  GPUMem Free" % HDR1
+    HDR2 = "%s  ===========" % HDR2
 
   if STATS_CPU_MEM:
-      HDR1 = "%s   %%user   %%nice %%system   %%idle %%iowait    %%irq  %%s/irq  %%total  Memory Free/Used" % HDR1
-      HDR2 = "%s  ======  ======  ======  ======  ======  ======  ======  ======  ================" % HDR2
+    HDR1 = "%s   %%user   %%nice %%system   %%idle %%iowait    %%irq  %%s/irq  %%total  Memory Free/Used" % HDR1
+    HDR2 = "%s  ======  ======  ======  ======  ======  ======  ======  ======  ================" % HDR2
+    if SWAP_ENABLED:
+      HDR1 = "%s(SwUse)" % HDR1
+      HDR2 = "%s=======" % HDR2
 
   printn("%s\n%s" % (HDR1, HDR2))
 
@@ -440,6 +448,11 @@ def ShowStats(STATS_CPU_MEM, STATS_GPU, bcm2385, irq, network, cpuload, memory, 
               colourise(cpuload[7], "%6.2f",    30, 50, 70, False),
               colourise(memory[1],  "%7s kB",   60, 75, 85, True,  compare=memory[2]),
               colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
+
+    if memory[4] != None:
+      LINE = "%s(%s)" % \
+              (LINE,
+               colourise(memory[4],  "%4.1f%%",  1,  5, 15, False, compare=memory[4]))
 
   printn("\n%s" % LINE)
 
@@ -630,7 +643,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.0"
+  VERSION = "0.1.1"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -749,6 +762,8 @@ def main(args):
   # Find out where vcgencmd/vcdbg binaries are...
   find_vcgencmd_vcdbg()
 
+  SWAP_ENABLED = (int(grep("SwapTotal", readfile("/proc/meminfo"), field=1, defaultvalue="0")) != 0)
+
   # Renice self
   if NICE_ADJUST < 0:
     PRIO_D = "maximum"
@@ -792,7 +807,7 @@ def main(args):
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
-      ShowHeadings(STATS_CPU_MEM, STATS_GPU)
+      ShowHeadings(STATS_CPU_MEM, STATS_GPU, SWAP_ENABLED)
       firsthdr = False
       count = 0
     count += 1

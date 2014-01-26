@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.1 (26/01/2014)
+* Add: Include "SwUse" (Swap Used %) in memory statistics if swap memory is enabled
+
 ##Version 0.1.0 (25/01/2014)
 * Add: Include Swap allocation (if swap is enabled) in summary information
 
