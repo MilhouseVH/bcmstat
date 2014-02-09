@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.2 (09/02/2014)
+* Detect XBian
+
 ##Version 0.1.1 (26/01/2014)
 * Add: Include "SwUse" (Swap Used %) in memory statistics if swap memory is enabled
 

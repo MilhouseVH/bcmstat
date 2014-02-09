@@ -572,6 +572,8 @@ def get_latest_version():
         DIST = "Raspbian"
       elif grep("raspbmc", etc_issue, head=1, case_sensitive=False):
         DIST = "Raspbmc"
+      elif grep("xbian", etc_issue, head=1, case_sensitive=False):
+        DIST = "XBian"
 
   # Need user agent etc. for analytics
   user_agent = "Mozilla/5.0 (%s; %s_%s; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
