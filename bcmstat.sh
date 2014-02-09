@@ -645,7 +645,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.1"
+  VERSION = "0.1.2"
 
   INTERFACE = "eth0"
   DELAY = 2
