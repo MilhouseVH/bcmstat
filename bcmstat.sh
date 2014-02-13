@@ -309,18 +309,11 @@ def ceildiv(a, b):
 def ShowConfig(nice_value, priority_desc, args):
   global VCGENCMD, VERSION
 
-  BOOT_DIR = grep("mmcblk0p1", runcommand("mount"), field=2)
-  CONFIG_TXT = readfile("%s/config.txt" % BOOT_DIR)
-
   BOOTED = datetime.datetime.fromtimestamp(int(grep("btime", readfile("/proc/stat"), 1))).strftime('%c')
 
-  MEM_MAX = 512 if int(re.sub(".*: ", "", grep("Revision", readfile("/proc/cpuinfo")))[-4:],16) > 10 else 256
-
-  MEM_GPU_XXX = grep("^[ ]*gpu_mem_%s[ =]" % MEM_MAX, CONFIG_TXT, 1, split_char="=")
-  MEM_GPU_GLB = grep("^[ ]*gpu_mem[ =]", CONFIG_TXT, 1, split_char="=")
-  if not MEM_GPU_GLB: MEM_GPU_GLB = 64
-  MEM_GPU = MEM_GPU_XXX if MEM_GPU_XXX else MEM_GPU_GLB
-  MEM_ARM = "%d" % (int(MEM_MAX) - int(MEM_GPU))
+  MEM_ARM = int(vcgencmd("get_mem arm")[:-1])
+  MEM_GPU = int(vcgencmd("get_mem gpu")[:-1])
+  MEM_MAX = MEM_ARM + MEM_GPU
 
   SWAP_TOTAL = int(grep("SwapTotal", readfile("/proc/meminfo"), field=1, defaultvalue="0"))
 
@@ -645,7 +638,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.2"
+  VERSION = "0.1.3"
 
   INTERFACE = "eth0"
   DELAY = 2
