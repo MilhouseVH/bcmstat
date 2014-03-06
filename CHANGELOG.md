@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.4 (14/02/2014)
+* Add: Display peak IRQ, RX and TX values when terminating bcmstat.sh with ctrl-c
+
 ##Version 0.1.3 (13/02/2014)
 * Chg: Use `vcgencmd get_mem gpu` and `vcgencmd get_mem arm` to calculate GPU/ARM split, and total available RAM.
 

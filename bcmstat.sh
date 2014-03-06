@@ -425,8 +425,8 @@ def ShowStats(STATS_CPU_MEM, STATS_GPU, bcm2385, irq, network, cpuload, memory, 
   if STATS_GPU:
     LINE = "%s  %s (%s)" % \
              (LINE,
-              colourise(gpumem[0],  "%5s",   70, 50, 30, False, compare=gpumem[2]),
-              colourise(gpumem[2],  "%2d%%", 70, 50, 30, False, compare=gpumem[2]))
+              colourise(gpumem[0],  "%4s",   70, 50, 30, False, compare=gpumem[2]),
+              colourise(gpumem[2],  "%3d%%", 70, 50, 30, False, compare=gpumem[2]))
 
   if STATS_CPU_MEM:
     LINE = "%s  %s  %s  %s  %s  %s  %s  %s  %s  %s/%s" % \
@@ -635,10 +635,11 @@ def autoUpdate(args):
 def main(args):
   global COLOUR, SUDO
   global GITHUB, ANALYTICS, VERSION
+  global PEAKVALUES
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.3"
+  VERSION = "0.1.4"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -820,11 +821,25 @@ def main(args):
 
     ShowStats(STATS_CPU_MEM, STATS_GPU, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1])
 
+    #Store peak values
+    if PEAKVALUES == None:
+      PEAKVALUES = {"IRQ":0, "RX":0, "TX":0}
+    n = {}
+    n["IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["IRQ"] else PEAKVALUES["IRQ"]
+    n["RX"]  = NET[0][1][0] if NET[0][1][0] > PEAKVALUES["RX"] else PEAKVALUES["RX"]
+    n["TX"]  = NET[0][1][1] if NET[0][1][1] > PEAKVALUES["TX"] else PEAKVALUES["TX"]
+    PEAKVALUES = n
+
     time.sleep(DELAY)
 
 if __name__ == "__main__":
   try:
+    PEAKVALUES = None
     main(sys.argv[1:])
   except (KeyboardInterrupt, SystemExit) as e:
     print()
+    if PEAKVALUES:
+      line = ""
+      for item in PEAKVALUES: line = "%s%s%s: %s" % (line, (", " if line else ""), item, PEAKVALUES[item])
+      print("Peak Values: %s" % line)
     if type(e) == SystemExit: sys.exit(int(str(e)))
