@@ -22,6 +22,14 @@ Specify a default configuration in ~/.bcmstat.conf, eg:
 xgcd10
 ```
 
+####Installing on the Pi:
+
+To install the latest version directly from this github repository:
+```
+curl -Ls https://raw.githubusercontent.com/MilhouseVH/bcmstat/master/bcmstat.sh -o ~/bcmstat.sh
+chmod +x ~/bcmstat.sh
+```
+
 ####Example output:
 ```
 rpi512:~ # ./bcmstat.sh cxgd10
