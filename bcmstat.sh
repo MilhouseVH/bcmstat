@@ -41,7 +41,7 @@ VCGENCMD = None
 VCDBGCMD = None
 GPU_ALLOCATED = None
 SUDO = ""
-TMAX = 0
+TMAX = 0.0
 COLOUR = False
 
 # Primitives
@@ -219,7 +219,7 @@ def getNetwork(storage, interface):
 def getBCM2835(storage):
   global TMAX
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
-  tCore = int(readfile("/sys/class/thermal/thermal_zone0/temp"))
+  tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
   tCore = 0 if tCore < 0 else tCore
   TMAX  = tCore if (tCore > TMAX and tCore < 85000) else TMAX
 
@@ -228,8 +228,8 @@ def getBCM2835(storage):
                 [int(vcgencmd("measure_clock arm")),
                  int(vcgencmd("measure_clock core")),
                  int(vcgencmd("measure_clock h264")),
-                 int(tCore),
-                 int(TMAX)])
+                 tCore,
+                 TMAX])
 
   if storage[2][0] != 0:
     s1 = storage[1]
@@ -639,7 +639,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.4"
+  VERSION = "0.1.5"
 
   INTERFACE = "eth0"
   DELAY = 2

@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.5 (06/04/2014)
+* Fix: Store tmCore/TMAX as float not int to avoid loss of precision - thanks g7ruh. Closes #1
+
 ##Version 0.1.4 (14/02/2014)
 * Add: Display peak IRQ, RX and TX values when terminating bcmstat.sh with ctrl-c
 
