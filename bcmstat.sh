@@ -39,7 +39,8 @@ import platform, socket, urllib2, hashlib
 
 VCGENCMD = None
 VCDBGCMD = None
-GPU_ALLOCATED = None
+GPU_ALLOCATED_R = None
+GPU_ALLOCATED_M = None
 SUDO = ""
 TMAX = 0.0
 COLOUR = False
@@ -63,11 +64,13 @@ def runcommand(command, ignore_error=False):
   try:
     return subprocess.check_output(command.split(" "), stderr=subprocess.STDOUT)[:-1]
   except:
-    if not ignore_error:
+    if ignore_error:
+      return None
+    else:
       raise
     
 def find_vcgencmd_vcdbg():
-  global VCGENCMD, VCDBGCMD
+  global VCGENCMD, VCDBGCMD, VCGENCMD_GET_MEM
 
   for file in [runcommand("which vcgencmd", ignore_error=True), "/usr/bin/vcgencmd", "/opt/vc/bin/vcgencmd"]:
     if file and os.path.exists(file) and os.path.isfile(file) and os.access(file, os.X_OK):
@@ -79,6 +82,12 @@ def find_vcgencmd_vcdbg():
       VCDBGCMD = file
       break
 
+  # Determine if we have reloc/malloc get_mem capability
+  VCGENCMD_GET_MEM = False
+  if VCGENCMD:
+    if vcgencmd("get_mem reloc_total") != "0M" or vcgencmd("get_mem reloc") != "0M":
+      VCGENCMD_GET_MEM = True
+
 def vcgencmd(args, split=True):
   global VCGENCMD
   if split:
@@ -89,7 +98,12 @@ def vcgencmd(args, split=True):
 def vcgencmd_items(args, isInt=False):
   d = {}
   for l in [x.split("=") for x in vcgencmd(args, split=False).split("\n")]:
-    d[l[0]] = int(l[1]) if isInt else l[1]
+    if not isInt:
+      d[l[0]] = l[1]
+    elif l[1][:2] == "0x":
+      d[l[0]] = int(l[1], 16)
+    else:
+      d[l[0]] = int(l[1])
 
   return d
 
@@ -112,7 +126,7 @@ def grep(match_string, input_string, field=None, head=None, tail=None, split_cha
 
   for line in [x for x in input_string.split("\n") if re.search(match_string, x, flags=re_flags)]:
     aline = re.sub("%s+" % split_char, split_char, line.strip()).split(split_char)
-    if field != None:
+    if field is not None:
       if len(aline) > field:
         lines.append(aline[field])
     else:
@@ -146,7 +160,7 @@ def colourise(display, nformat, green, yellow, red, withcomma, compare=None):
   global COLOUR
 
   cnum = format(display, ",d") if withcomma else display
-  number = compare if compare != None else display
+  number = compare if compare is not None else display
 
   if COLOUR:
     if red > green:
@@ -177,7 +191,7 @@ def getIRQ(storage):
     dTime = 1 if dTime <= 0 else dTime
     storage[0] = (dTime, [int((int(s1[1]) - int(s2[1]))/dTime)])
 
-def getCPULoad(storage, ):
+def getCPULoad(storage):
   storage[2] = storage[1]
   storage[1] = (time.time(), grep("", readfile("/proc/stat"), head=1))
 
@@ -280,28 +294,51 @@ def getMemory(storage, include_swap):
     dTime = 1 if dTime <= 0 else dTime
     storage[0] = (dTime, [s1[1][0], s1[1][1], s1[1][2], s1[1][2] - s2[1][2], s1[1][3]])
 
-def getGPUMem(storage):
-  global GPU_ALLOCATED
+def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
+  global GPU_ALLOCATED_R, GPU_ALLOCATED_M, VCGENCMD_GET_MEM
 
-  vcgencmd("cache_flush")
-
-  # Get gpu memory data. We only need to process a few lines near the top so
-  # ignore individual memory block details by truncating data to 512 bytes.
-  gpudata = vcdbg("reloc")[:512]
-
-  if not GPU_ALLOCATED:
-    GPU_ALLOCATED = tobytes(grep("total space allocated", gpudata, 4, head=1)[:-1])
-
-  freemem = grep("free memory in", gpudata, 0, head=1)
-  if freemem == "": 
-    freemem = "???"
-    bfreemem = 0
+  if VCGENCMD_GET_MEM:
+    if not GPU_ALLOCATED_R:
+      GPU_ALLOCATED_R = tobytes(vcgencmd("get_mem reloc_total"))
+      GPU_ALLOCATED_M = tobytes(vcgencmd("get_mem malloc_total"))
+    freemem_r = vcgencmd("get_mem reloc") if STATS_GPU_R else ""
+    freemem_m = vcgencmd("get_mem malloc") if STATS_GPU_M else ""
   else:
-    bfreemem = tobytes(freemem)
+    vcgencmd("cache_flush")
 
-  percent_free = (float(bfreemem)/float(GPU_ALLOCATED))*100
+    # Get gpu memory data. We only need to process a few lines near the top so
+    # ignore individual memory block details by truncating data to 512 bytes.
+    gpudata = vcdbg("reloc")[:512]
 
-  storage[0] = (time.time(), [freemem, bfreemem, int(percent_free), GPU_ALLOCATED])
+    if not GPU_ALLOCATED_R:
+      GPU_ALLOCATED_R = tobytes(grep("total space allocated", gpudata, 4, head=1)[:-1])
+      GPU_ALLOCATED_M = 0
+
+    freemem_r = grep("free memory in", gpudata, 0, head=1)
+    freemem_m = ""
+
+  data = {}
+  if STATS_GPU_R:
+    if freemem_r == "": 
+      freemem_r = "???"
+      bfreemem_r = 0
+      percent_free_r = 0
+    else:
+      bfreemem_r = tobytes(freemem_r)
+      percent_free_r = (float(bfreemem_r)/float(GPU_ALLOCATED_R))*100
+    data["reloc"] = [freemem_r, bfreemem_r, int(percent_free_r), GPU_ALLOCATED_R]
+
+  if STATS_GPU_M:
+    if freemem_m == "": 
+      freemem_m = "???"
+      bfreemem_m = 0
+      percent_free_m = 0
+    else:
+      bfreemem_m = tobytes(freemem_m)
+      percent_free_m = (float(bfreemem_m)/float(GPU_ALLOCATED_M))*100
+    data["malloc"] = [freemem_m, bfreemem_m, int(percent_free_m), GPU_ALLOCATED_M]
+
+  storage[0] = (time.time(), data)
 
 def ceildiv(a, b):
   return -(-a // b)
@@ -390,24 +427,31 @@ def ShowConfig(nice_value, priority_desc, args):
   print("  Codecs: %s" % " ".join(CODECS))
   printn("  Booted: %s" % BOOTED)
 
-def ShowHeadings(STATS_CPU_MEM, STATS_GPU, SWAP_ENABLED):
+def ShowHeadings(display_flags):
   HDR1 = "Time          ARM     Core     H264  Core Temp (Max)   IRQ/s      RX B/s      TX B/s"
   HDR2 = "========  =======  =======  =======  ===============  ======  ==========  =========="
 
-  if STATS_GPU:
-    HDR1 = "%s  GPUMem Free" % HDR1
+  if display_flags["gpu_reloc"]:
+    if display_flags["gpu_malloc"]:
+      HDR1 = "%s  Reloc  Free" % HDR1
+    else:
+      HDR1 = "%s  GPUMem Free" % HDR1
     HDR2 = "%s  ===========" % HDR2
 
-  if STATS_CPU_MEM:
+  if display_flags["gpu_malloc"]:
+    HDR1 = "%s  Malloc Free" % HDR1
+    HDR2 = "%s  ===========" % HDR2
+
+  if display_flags["cpu_mem"]:
     HDR1 = "%s   %%user   %%nice %%system   %%idle %%iowait    %%irq  %%s/irq  %%total  Memory Free/Used" % HDR1
     HDR2 = "%s  ======  ======  ======  ======  ======  ======  ======  ======  ================" % HDR2
-    if SWAP_ENABLED:
+    if display_flags["swap"]:
       HDR1 = "%s(SwUse)" % HDR1
       HDR2 = "%s=======" % HDR2
 
   printn("%s\n%s" % (HDR1, HDR2))
 
-def ShowStats(STATS_CPU_MEM, STATS_GPU, bcm2385, irq, network, cpuload, memory, gpumem):
+def ShowStats(display_flags, bcm2385, irq, network, cpuload, memory, gpumem):
   now = datetime.datetime.now()
   TIME = "%02d:%02d:%02d" % (now.hour, now.minute, now.second)
 
@@ -422,13 +466,21 @@ def ShowStats(STATS_CPU_MEM, STATS_GPU, bcm2385, irq, network, cpuload, memory, 
             colourise(network[0],         "%10s",   0.5e6, 2.5e6, 5.0e6, True),
             colourise(network[1],         "%10s",   0.5e6, 2.5e6, 5.0e6, True))
 
-  if STATS_GPU:
+  if display_flags["gpu_reloc"]:
+    data = gpumem["reloc"]
     LINE = "%s  %s (%s)" % \
              (LINE,
-              colourise(gpumem[0],  "%4s",   70, 50, 30, False, compare=gpumem[2]),
-              colourise(gpumem[2],  "%3d%%", 70, 50, 30, False, compare=gpumem[2]))
+              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
+              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
 
-  if STATS_CPU_MEM:
+  if display_flags["gpu_malloc"]:
+    data = gpumem["malloc"]
+    LINE = "%s  %s (%s)" % \
+             (LINE,
+              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
+              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
+
+  if display_flags["cpu_mem"]:
     LINE = "%s  %s  %s  %s  %s  %s  %s  %s  %s  %s/%s" % \
              (LINE,
               colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
@@ -442,7 +494,8 @@ def ShowStats(STATS_CPU_MEM, STATS_GPU, bcm2385, irq, network, cpuload, memory, 
               colourise(memory[1],  "%7s kB",   60, 75, 85, True,  compare=memory[2]),
               colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
 
-    if memory[4] != None:
+    # Swap memory
+    if display_flags["swap"] and memory[4] is not None:
       LINE = "%s(%s)" % \
               (LINE,
                colourise(memory[4],  "%4.1f%%",  1,  5, 15, False, compare=memory[4]))
@@ -461,8 +514,9 @@ def ShowHelp():
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
   print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
-  print("g/G      Do (g)/don't (G) monitor additional GPU memory stats")
-  print("s/S      Do (s)/don/t (S) include any available swap memory when calculating memory statistics")
+  print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
+  print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
+  print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
   print("q/Q      Do (q)/don't (Q) suppress configuraton inforation")
   print()
   print("V        Check version")
@@ -584,7 +638,7 @@ def get_latest_version():
   (remoteVersion, remoteHash) = get_latest_version_ex(ANALYTICS, headers = HEADERS, checkerror = False)
 
   # If the Analytics call fails, go direct to github
-  if remoteVersion == None or remoteHash == None:
+  if remoteVersion is None or remoteHash is None:
     (remoteVersion, remoteHash) = get_latest_version_ex("%s/%s" % (GITHUB, "VERSION"))
 
   return (remoteVersion, remoteHash)
@@ -636,10 +690,11 @@ def main(args):
   global COLOUR, SUDO
   global GITHUB, ANALYTICS, VERSION
   global PEAKVALUES
+  global VCGENCMD_GET_MEM
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.5"
+  VERSION = "0.1.6"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -651,7 +706,8 @@ def main(args):
   INCLUDE_SWAP = True
 
   STATS_CPU_MEM = False
-  STATS_GPU = False
+  STATS_GPU_R = False
+  STATS_GPU_M = False
 
   CHECK_UPDATE = True
 
@@ -707,9 +763,14 @@ def main(args):
       NICE_ADJUST = -20
 
     elif a1 == "g":
-      STATS_GPU = True
+      STATS_GPU_R = True
     elif a1 == "G":
-      STATS_GPU = False
+      STATS_GPU_R = False
+
+    elif a1 == "f":
+      STATS_GPU_M = True
+    elif a1 == "F":
+      STATS_GPU_M = False
 
     elif a1 == "x":
       STATS_CPU_MEM = True
@@ -717,9 +778,9 @@ def main(args):
       STATS_CPU_MEM = False
 
     elif a1 == "s":
-      INCLUDE_SWAP = False
-    elif a1 == "S":
       INCLUDE_SWAP = True
+    elif a1 == "S":
+      INCLUDE_SWAP = False
 
     elif a1 == "q":
       QUIET = True
@@ -777,6 +838,14 @@ def main(args):
   if not QUIET:
     ShowConfig(NICE_V, PRIO_D, args)
 
+  if STATS_GPU_M and not VCGENCMD_GET_MEM:
+    msg="WARNING: malloc gpu memory stats (f) require firmware with a build date of 18 Jun 2014 (or later) - disabling"
+    if QUIET:
+      printerr("%s" % msg)
+    else:
+      printerr("\n\n%s" % msg, newLine=False)
+    STATS_GPU_M = False
+
   #       -Delta-   -Current-  -Previous-
   IRQ = [(0, None), (0, None), (0, None)]
   NET = [(0, None), (0, None), (0, None)]
@@ -795,15 +864,20 @@ def main(args):
 
   if STATS_CPU_MEM:
     getCPULoad(CPU)
-    getMemory(MEM, INCLUDE_SWAP)
+    getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
 
   count = HDREVERY
   firsthdr = True
 
+  display_flags = {"cpu_mem":    STATS_CPU_MEM,
+                   "gpu_reloc":  STATS_GPU_R,
+                   "gpu_malloc": STATS_GPU_M,
+                   "swap":       (SWAP_ENABLED and INCLUDE_SWAP)}
+
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
-      ShowHeadings(STATS_CPU_MEM, STATS_GPU, SWAP_ENABLED)
+      ShowHeadings(display_flags)
       firsthdr = False
       count = 0
     count += 1
@@ -812,17 +886,17 @@ def main(args):
     getIRQ(IRQ)
     getNetwork(NET, INTERFACE)
 
-    if STATS_GPU:
-      getGPUMem(GPU)
+    if STATS_GPU_R or STATS_GPU_M:
+      getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
     if STATS_CPU_MEM:
       getCPULoad(CPU)
-      getMemory(MEM, INCLUDE_SWAP)
+      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
 
-    ShowStats(STATS_CPU_MEM, STATS_GPU, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1])
+    ShowStats(display_flags, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1])
 
     #Store peak values
-    if PEAKVALUES == None:
+    if PEAKVALUES is None:
       PEAKVALUES = {"IRQ":0, "RX":0, "TX":0}
     n = {}
     n["IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["IRQ"] else PEAKVALUES["IRQ"]

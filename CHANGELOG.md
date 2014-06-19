@@ -1,5 +1,11 @@
 #Changelog
 
+##Version 0.1.6 (19/06/2014)
+* Fix: Support hex encoded integers in call to `vcgencmd get_config int`
+* Fix: When available, use `vcgencmd get_mem [reloc_total|reloc|malloc_total|malloc]` calls rather than `vcdbg reloc` which suffers from cache coherency issues
+* Add: New `f` option to display malloc gpu memory (`g` already shows reloc memory). Contrary option is `F` to disable malloc display.
+* Chg: Invert interpretation of the `s` and `S` (swap memory) options, these seem to have been interpreted the wrong way around...
+
 ##Version 0.1.5 (06/04/2014)
 * Fix: Store tmCore/TMAX as float not int to avoid loss of precision - thanks g7ruh. Closes #1
 
