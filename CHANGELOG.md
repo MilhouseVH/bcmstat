@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.8 (18/07/2014)
+* Chg: Also look for config in `~/.config/bcmstat.conf` if not found elsewhere (ie. `~/.bcmstat.conf`)
+
 ##Version 0.1.7 (18/07/2014)
 * Chg: Don't perform auto-update if running from a read-only filesystem
 

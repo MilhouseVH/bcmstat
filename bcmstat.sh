@@ -694,7 +694,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.7"
+  VERSION = "0.1.8"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -714,9 +714,12 @@ def main(args):
   # Read default settings from config file
   # Can be overidden by command line.
   oargs = args
-  config = os.path.expanduser("~/.bcmstat.conf")
-  if os.path.exists(config):
-    args.insert(0, readfile(config))
+  config1 = os.path.expanduser("~/.bcmstat.conf")
+  config2 = os.path.expanduser("~/.config/bcmstat.conf")
+  if os.path.exists(config1):
+    args.insert(0, readfile(config1))
+  elif os.path.exists(config2):
+    args.insert(0, readfile(config2))
 
   # Crude attempt at argument parsing as I don't want use argparse
   # but instead try and keep it vaguely more shell-like, ie. -xcd10
