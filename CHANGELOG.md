@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.1.7 (18/07/2014)
+* Chg: Don't perform auto-update if running from a read-only filesystem
+
 ##Version 0.1.6 (19/06/2014)
 * Fix: Support hex encoded integers in call to `vcgencmd get_config int`
 * Fix: When available, use `vcgencmd get_mem [reloc_total|reloc|malloc_total|malloc]` calls rather than `vcdbg reloc` which suffers from cache coherency issues

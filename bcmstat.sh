@@ -694,7 +694,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.6"
+  VERSION = "0.1.7"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -811,7 +811,10 @@ def main(args):
       sys.exit(2)
 
   if CHECK_UPDATE:
-    autoUpdate(oargs)
+    path = os.path.realpath(__file__)
+    dir = os.path.dirname(path)
+    if os.access(dir, os.W_OK):
+      autoUpdate(oargs)
 
   # Do we need sudo to raise process priority or run vcdbg?
   if getpass.getuser() != "root": SUDO = "sudo "
