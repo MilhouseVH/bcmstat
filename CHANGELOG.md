@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.0 (02/02/2015)
+* Chg: Add `W` option in place of `F` to force downloads
+
 ##Version 0.1.9 (31/01/2015)
 * Add: Show per-CPU load with `-p`
 * Add: Include CPU type and quantity in summary section
