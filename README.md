@@ -33,7 +33,7 @@ chmod +x ~/bcmstat.sh
 ####Example output:
 ```
 rpi2:~ # ./bcmstat.sh
-  Config: v0.2.0, args "Ccgxpd10", priority lowest (+19)
+  Config: v0.2.0, args "cgxpd10", priority lowest (+19)
      CPU: 4 x ARMv7 cores available, using ondemand governor
   Memory: 1008MB (split 752MB ARM, 256MB GPU)
 HW Block: |   ARM   |  Core  |  H264  |    SDRAM    |
