@@ -616,7 +616,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [g|G] [x|X] [p|P] [s|S] [q] [h] [V|U|F|C]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [g|G] [x|X] [p|P] [s|S] [q] [h] [V|U|W|C]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -635,7 +635,7 @@ def ShowHelp():
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
-  print("F        Force update to latest version")
+  print("W        Force update to latest version")
   print("C        Disable auto-update")
   print()
   print("h        Print this help")
@@ -808,7 +808,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.9"
+  VERSION = "0.2.0"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -916,7 +916,7 @@ def main(args):
     elif a1 == "U":
       downloadLatestVersion(oargs, forceupdate=False)
       return
-    elif a1 == "F":
+    elif a1 == "W":
       downloadLatestVersion(oargs, forceupdate=True)
       return
     elif a1 == "C":
