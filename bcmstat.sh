@@ -44,6 +44,7 @@ GPU_ALLOCATED_M = None
 SUDO = ""
 TMAX = 0.0
 COLOUR = False
+SYSINFO = {}
 
 # Primitives
 def printn(text):
@@ -166,14 +167,14 @@ def colourise(display, nformat, green, yellow, red, withcomma, compare=None):
     if red > green:
       if number >= red:
         return "%s%s%s" % ("\033[0;31m", nformat % cnum, "\033[0m")
-      elif number >= yellow:
+      elif yellow is not None and number >= yellow:
         return "%s%s%s" % ("\033[0;33m", nformat % cnum, "\033[0m")
       elif number >= green:
         return "%s%s%s" % ("\033[0;32m", nformat % cnum, "\033[0m")
     else:
       if number <= red:
         return "%s%s%s" % ("\033[0;31m", nformat % cnum, "\033[0m")
-      elif number <= yellow:
+      elif yellow is not None and number <= yellow:
         return "%s%s%s" % ("\033[0;33m", nformat % cnum, "\033[0m")
       elif number <= green:
         return "%s%s%s" % ("\033[0;32m", nformat % cnum, "\033[0m")
@@ -191,9 +192,27 @@ def getIRQ(storage):
     dTime = 1 if dTime <= 0 else dTime
     storage[0] = (dTime, [int((int(s1[1]) - int(s2[1]))/dTime)])
 
-def getCPULoad(storage):
+def minmax(min, max, value):
+  if value < min:
+    return min
+  elif value > max:
+    return max
+  else:
+    return value
+
+# Collect processor stats once per loop, so that consistent stats are
+# used when calculating total system load and individual core loads
+def getProcStats(storage):
   storage[2] = storage[1]
-  storage[1] = (time.time(), grep("", readfile("/proc/stat"), head=1))
+
+  cores = {}
+  for core in grep("^cpu[0-9]*", readfile("/proc/stat")).split("\n"):
+    items = core.split(" ")
+    jiffies = []
+    for jiffy in items[1:]:
+      jiffies.append(int(jiffy))
+    cores[items[0]] = jiffies
+  storage[1] = (time.time(), cores)
 
   if storage[2][0] != 0:
     s1 = storage[1]
@@ -201,12 +220,35 @@ def getCPULoad(storage):
     dTime = s1[0] - s2[0]
     dTime = 1 if dTime <= 0 else dTime
 
-    c1 = s1[1].split(" ")
-    c2 = s2[1].split(" ")
+    cores = {}
+    for core in s1[1]:
+      if core in s2[1]:
+        jiffies = []
+        for i in range(0, 10):
+          jiffies.append((int(s1[1][core][i]) - int(s2[1][core][i])) / dTime)
+        cores[core] = jiffies
+    storage[0] = (dTime, cores)
+
+# Total system load
+def getCPULoad(storage, proc, sysinfo):
+  if proc[2][0] != 0:
+    dTime = proc[0][0]
+    core = proc[0][1]["cpu"]
+    nproc = sysinfo["nproc"]
     c = []
-    for i in range(1, 11):
-      c.append((int(c1[i]) - int(c2[i])) / dTime)
+    for i in range(0, 10):
+      c.append(minmax(0, 100, (core[i] / nproc)))
     storage[0] = (dTime, [c[0], c[1], c[2], c[3], c[4], c[5], c[6], 100 - c[3]])
+
+# Individual core loads
+def getCoreStats(storage, proc):
+  if proc[2][0] != 0:
+    dTime = proc[0][0]
+    load = []
+    for core in sorted(proc[0][1]):
+      if core == "cpu": continue
+      load.append((core, 100 - minmax(0, 100, proc[0][1][core][3])))
+    storage[0] = (dTime, load)
 
 def getNetwork(storage, interface):
   storage[2] = storage[1]
@@ -343,7 +385,56 @@ def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
 def ceildiv(a, b):
   return -(-a // b)
 
-def ShowConfig(nice_value, priority_desc, args):
+def MHz(value, fwidth, cwidth):
+  return ("%*dMHz" % (fwidth, value)).center(cwidth)
+
+def getsysinfo():
+  sysinfo = {}
+
+  VCG_INT = vcgencmd_items("get_config int", isInt=True)
+
+  sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
+  sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
+  sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
+  sysinfo["core_max"]   = VCG_INT.get("core_freq",250)
+  sysinfo["h264_max"]   = VCG_INT.get("h264_freq", 250)
+  sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", 400)
+  sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
+  sysinfo["sdram_volt"] = VCG_INT.get("over_voltage_sdram", 0)
+  sysinfo["temp_limit"] = VCG_INT.get("temp_limit", 85)
+  sysinfo["force_turbo"]= (VCG_INT.get("force_turbo", 0) != 0)
+
+  if sysinfo["force_turbo"]:
+    core_min = sysinfo["core_max"]
+  else:
+    core_min = 250
+    core_min = sysinfo["core_max"] if sysinfo["core_max"] < core_min else core_min
+  sysinfo["core_min"] = core_min
+
+  # Calculate thresholds for red/yellow/green colour
+  arm_min = sysinfo["arm_min"] - 10
+  if sysinfo["arm_max"] <= 700:
+    # Should never reach this figure...
+    arm_max = 1e6
+  else:
+    arm_max = sysinfo["arm_max"] - 5
+
+  core_min = sysinfo["core_min"] - 10
+  if sysinfo["core_max"] <= 250:
+    core_max = 1e6
+  else:
+    core_max = sysinfo["core_max"] - 5
+
+  limits = {}
+  limits["arm_min"] = arm_min
+  limits["arm_max"] = arm_max
+  limits["core_min"] = core_min
+  limits["core_max"] = core_max
+  sysinfo["limits"] = limits
+
+  return sysinfo
+
+def ShowConfig(nice_value, priority_desc, sysinfo, args):
   global VCGENCMD, VERSION
 
   BOOTED = datetime.datetime.fromtimestamp(int(grep("btime", readfile("/proc/stat"), 1))).strftime('%c')
@@ -356,18 +447,20 @@ def ShowConfig(nice_value, priority_desc, args):
 
   VCG_INT    = vcgencmd_items("get_config int", isInt=True)
 
-  GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
-  ARM_MIN    = int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))
-  ARM_MAX    = int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))
-  CORE_MAX   = VCG_INT.get("core_freq",250)
-  H264_MAX   = VCG_INT.get("h264_freq", 250)
-  SDRAM_MAX  = VCG_INT.get("sdram_freq", 400)
-  ARM_VOLT   = VCG_INT.get("over_voltage", 0)
-  SDRAM_VOLT = VCG_INT.get("over_voltage_sdram", 0)
-  TEMP_LIMIT = VCG_INT.get("temp_limit", 85)
-  FORCE_TURBO= (VCG_INT.get("force_turbo", 0) != 0)
+  NPROC      = sysinfo["nproc"]
+  ARM_MIN    = sysinfo["arm_min"]
+  ARM_MAX    = sysinfo["arm_max"]
+  CORE_MIN   = sysinfo["core_min"]
+  CORE_MAX   = sysinfo["core_max"]
+  H264_MAX   = sysinfo["h264_max"]
+  SDRAM_MAX  = sysinfo["sdram_max"]
+  ARM_VOLT   = sysinfo["arm_volt"]
+  SDRAM_VOLT = sysinfo["sdram_volt"]
+  TEMP_LIMIT = sysinfo["temp_limit"]
+  FORCE_TURBO= sysinfo["force_turbo"]
   vCore      = vcgencmd("measure_volts core")
   vRAM       = vcgencmd("measure_volts sdram_c")
+  GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
   FIRMWARE   = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
 
   OTHER_VARS = ["temp_limit=%d" % TEMP_LIMIT]
@@ -375,12 +468,6 @@ def ShowConfig(nice_value, priority_desc, args):
                "hdmi_force_hotplug", "hdmi_force_edid_audio", "no_hdmi_resample"]:
     if VCG_INT.get(item, 0) != 0:
       OTHER_VARS.append("%s=%d" % (item, VCG_INT.get(item, 0)))
-
-  if FORCE_TURBO:
-    CORE_MIN = CORE_MAX
-  else:
-    CORE_MIN = 250
-    CORE_MIN = CORE_MAX if CORE_MAX < CORE_MIN else CORE_MIN
 
   CODECS = []
   for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG", "DTS", "DDP"]:
@@ -391,19 +478,20 @@ def ShowConfig(nice_value, priority_desc, args):
   nv = "%s%d" % ("+" if nice_value > 0 else "", nice_value)
 
   SWAP_MEM = "" if SWAP_TOTAL == 0 else " plus %dMB Swap" % int(ceildiv(SWAP_TOTAL, 1024))
+  ARM_ARCH = grep("^model name", readfile("/proc/cpuinfo"), field=2, head=1)[0:5]
 
   print("  Config: v%s, args \"%s\", priority %s (%s)" % (VERSION, " ".join(args), priority_desc, nv))
-  print("Governor: %s" % GOV)
+  print("     CPU: %d x %s core%s available, using %s governor" % (NPROC, ARM_ARCH, "s"[NPROC==1:], GOV))
   print("  Memory: %sMB (split %sMB ARM, %sMB GPU)%s" % (MEM_MAX, MEM_ARM, MEM_GPU, SWAP_MEM))
-  print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(6), "H264".center(6), "SDRAM".center(9)))
-  print("Min Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MIN/1000), CORE_MIN,        0, SDRAM_MAX))
-  print("Max Freq: | %4dMhz | %3dMhz | %3dMhz |   %3dMhz  |" % (int(ARM_MAX/1000), CORE_MAX, H264_MAX, SDRAM_MAX))
+  print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(6), "H264".center(6), "SDRAM".center(11)))
+  print("Min Freq: | %s | %s | %s | %s |" % (MHz(ARM_MIN,4,7), MHz(CORE_MIN,3,6), MHz(0,3,6),        MHz(SDRAM_MAX,3,11)))
+  print("Max Freq: | %s | %s | %s | %s |" % (MHz(ARM_MAX,4,7), MHz(CORE_MAX,3,6), MHz(H264_MAX,3,6), MHz(SDRAM_MAX,3,11)))
 
   v1 = "%d, %s" % (ARM_VOLT, vCore)
   v2 = "%d, %s" % (SDRAM_VOLT, vRAM)
   v1 = "+%s" % v1 if ARM_VOLT > 0 else v1
   v2 = "+%s" % v2 if SDRAM_VOLT > 0 else v2
-  print("Voltages: | %s | %s |" % (v1.center(25), v2.center(9)))
+  print("Voltages: | %s | %s |" % (v1.center(25), v2.center(11)))
 
   # Chop "Other" properties up into multiple lines of limited length strings
   line = ""
@@ -427,61 +515,78 @@ def ShowConfig(nice_value, priority_desc, args):
   print("  Codecs: %s" % " ".join(CODECS))
   printn("  Booted: %s" % BOOTED)
 
-def ShowHeadings(display_flags):
-  HDR1 = "Time          ARM     Core     H264  Core Temp (Max)   IRQ/s      RX B/s      TX B/s"
-  HDR2 = "========  =======  =======  =======  ===============  ======  ==========  =========="
+def ShowHeadings(display_flags, sysinfo):
+  HDR1 = "Time         ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s"
+  HDR2 = "======== ======= ======= ======= =============== ====== ========== =========="
 
   if display_flags["gpu_reloc"]:
     if display_flags["gpu_malloc"]:
-      HDR1 = "%s  Reloc  Free" % HDR1
+      HDR1 = "%s Reloc  Free" % HDR1
     else:
-      HDR1 = "%s  GPUMem Free" % HDR1
-    HDR2 = "%s  ===========" % HDR2
+      HDR1 = "%s GPUMem Free" % HDR1
+    HDR2 = "%s ===========" % HDR2
 
   if display_flags["gpu_malloc"]:
-    HDR1 = "%s  Malloc Free" % HDR1
-    HDR2 = "%s  ===========" % HDR2
+    HDR1 = "%s Malloc Free" % HDR1
+    HDR2 = "%s ===========" % HDR2
 
   if display_flags["cpu_mem"]:
-    HDR1 = "%s   %%user   %%nice %%system   %%idle %%iowait    %%irq  %%s/irq  %%total  Memory Free/Used" % HDR1
-    HDR2 = "%s  ======  ======  ======  ======  ======  ======  ======  ======  ================" % HDR2
+    HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
+    HDR2 = "%s ====== ====== ====== ====== ====== ====== ====== ======" % HDR2
+
+  if display_flags["cpu_cores"]:
+    for i in range(0, sysinfo["nproc"]):
+      HDR1 = "%s   cpu%d" % (HDR1, i)
+      HDR2 = "%s ======" % HDR2
+
+  if display_flags["cpu_mem"]:
+    HDR1 = "%s Memory Free/Used" % HDR1
+    HDR2 = "%s ================" % HDR2
     if display_flags["swap"]:
       HDR1 = "%s(SwUse)" % HDR1
       HDR2 = "%s=======" % HDR2
 
   printn("%s\n%s" % (HDR1, HDR2))
 
-def ShowStats(display_flags, bcm2385, irq, network, cpuload, memory, gpumem):
+def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gpumem, cores):
+  global ARM_MIN, ARM_MAX
+
   now = datetime.datetime.now()
   TIME = "%02d:%02d:%02d" % (now.hour, now.minute, now.second)
 
-  LINE = "%s  %s  %s  %s  %s (%s)  %s  %s  %s" % \
+  limits = sysinfo["limits"]
+  arm_min = limits["arm_min"]
+  arm_max = limits["arm_max"] 
+  core_min = limits["core_min"]
+  core_max = limits["core_max"]
+
+  LINE = "%s %s %s %s %s (%s) %s %s %s" % \
            (TIME,
-            colourise(bcm2385[0]/1000000, "%4dMhz",   250,   800,   900, False),
-            colourise(bcm2385[1]/1000000, "%4dMhz",     0,   200,   400, False),
-            colourise(bcm2385[2]/1000000, "%4dMhz",     0,   200,   300, False),
-            colourise(bcm2385[3]/1000,    "%5.2fC",  50.0,  70.0,  80.0, False),
-            colourise(bcm2385[4]/1000,    "%5.2fC",  50.0,  70.0,  80.0, False),
-            colourise(irq[0],             "%6s",      500,  2500,  5000, True),
-            colourise(network[0],         "%10s",   0.5e6, 2.5e6, 5.0e6, True),
-            colourise(network[1],         "%10s",   0.5e6, 2.5e6, 5.0e6, True))
+            colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
+            colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
+            colourise(bcm2385[2]/1000000, "%4dMhz",       0,      200,      300, False),
+            colourise(bcm2385[3]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
+            colourise(bcm2385[4]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
+            colourise(irq[0],             "%6s",        500,     2500,     5000, True),
+            colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
+            colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
 
   if display_flags["gpu_reloc"]:
     data = gpumem["reloc"]
-    LINE = "%s  %s (%s)" % \
+    LINE = "%s %s (%s)" % \
              (LINE,
               colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
               colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
 
   if display_flags["gpu_malloc"]:
     data = gpumem["malloc"]
-    LINE = "%s  %s (%s)" % \
+    LINE = "%s %s (%s)" % \
              (LINE,
               colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
               colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
 
   if display_flags["cpu_mem"]:
-    LINE = "%s  %s  %s  %s  %s  %s  %s  %s  %s  %s/%s" % \
+    LINE = "%s %s %s %s %s %s %s %s %s" % \
              (LINE,
               colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
               colourise(cpuload[1], "%6.2f",    10, 20, 30, False),
@@ -490,7 +595,15 @@ def ShowStats(display_flags, bcm2385, irq, network, cpuload, memory, gpumem):
               colourise(cpuload[4], "%6.2f",     2,  5, 10, False),
               colourise(cpuload[5], "%6.2f",     2,  5, 10, False),
               colourise(cpuload[6], "%6.2f",   7.5, 15, 20, False),
-              colourise(cpuload[7], "%6.2f",    30, 50, 70, False),
+              colourise(cpuload[7], "%6.2f",    30, 50, 70, False))
+
+  if display_flags["cpu_cores"]:
+    for core in cores:
+      LINE = "%s %s" % (LINE, colourise(core[1], "%6.2f",    30, 50, 70, False))
+
+  if display_flags["cpu_mem"]:
+    LINE = "%s %s/%s" % \
+             (LINE,
               colourise(memory[1],  "%7s kB",   60, 75, 85, True,  compare=memory[2]),
               colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
 
@@ -503,7 +616,7 @@ def ShowStats(display_flags, bcm2385, irq, network, cpuload, memory, gpumem):
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [g|G] [x|X] [s|S] [q] [h] [V|U|F|C]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [g|G] [x|X] [p|P] [s|S] [q] [h] [V|U|F|C]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -514,6 +627,7 @@ def ShowHelp():
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
   print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
+  print("p/P      Do (x)/don't (X) monitor individual core load stats (when core count > 1)")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
@@ -694,7 +808,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.1.8"
+  VERSION = "0.1.9"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -706,6 +820,7 @@ def main(args):
   INCLUDE_SWAP = True
 
   STATS_CPU_MEM = False
+  STATS_CPU_CORE= False
   STATS_GPU_R = False
   STATS_GPU_M = False
 
@@ -780,6 +895,11 @@ def main(args):
     elif a1 == "X":
       STATS_CPU_MEM = False
 
+    elif a1 == "p":
+      STATS_CPU_CORE= True
+    elif a1 == "P":
+      STATS_CPU_CORE= False
+
     elif a1 == "s":
       INCLUDE_SWAP = True
     elif a1 == "S":
@@ -841,8 +961,12 @@ def main(args):
     runcommand("%srenice -n %d -p %d" % (SUDO, NICE_ADJUST, os.getpid()))
     NICE_V = os.nice(0)
 
+  # Collect basic system configuration
+  sysinfo = getsysinfo()
+  STATS_CPU_CORE = False if sysinfo["nproc"] < 2 else STATS_CPU_CORE
+
   if not QUIET:
-    ShowConfig(NICE_V, PRIO_D, args)
+    ShowConfig(NICE_V, PRIO_D, sysinfo, args)
 
   if STATS_GPU_M and not VCGENCMD_GET_MEM:
     msg="WARNING: malloc gpu memory stats (f) require firmware with a build date of 18 Jun 2014 (or later) - disabling"
@@ -855,10 +979,12 @@ def main(args):
   #       -Delta-   -Current-  -Previous-
   IRQ = [(0, None), (0, None), (0, None)]
   NET = [(0, None), (0, None), (0, None)]
+  PROC= [(0, None), (0, None), (0, None)]
   CPU = [(0, None), (0, None), (0, None)]
   BCM = [(0, None), (0, None), (0, None)]
   MEM = [(0, None), (0, None), (0, None)]
   GPU = [(0, None), (0, None), (0, None)]
+  CORE= [(0, None), (0, None), (0, None)]
 
   getBCM2835(BCM)
   getIRQ(IRQ)
@@ -868,14 +994,16 @@ def main(args):
     printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
     sys.exit(2)
 
-  if STATS_CPU_MEM:
-    getCPULoad(CPU)
-    getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+  if STATS_CPU_MEM or STATS_CPU_CORE:
+    getProcStats(PROC)
+    if STATS_CPU_MEM:
+      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
 
   count = HDREVERY
   firsthdr = True
 
   display_flags = {"cpu_mem":    STATS_CPU_MEM,
+                   "cpu_cores":  STATS_CPU_CORE,
                    "gpu_reloc":  STATS_GPU_R,
                    "gpu_malloc": STATS_GPU_M,
                    "swap":       (SWAP_ENABLED and INCLUDE_SWAP)}
@@ -883,7 +1011,7 @@ def main(args):
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
-      ShowHeadings(display_flags)
+      ShowHeadings(display_flags, sysinfo)
       firsthdr = False
       count = 0
     count += 1
@@ -895,11 +1023,15 @@ def main(args):
     if STATS_GPU_R or STATS_GPU_M:
       getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
-    if STATS_CPU_MEM:
-      getCPULoad(CPU)
-      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+    if STATS_CPU_MEM or STATS_CPU_CORE:
+      getProcStats(PROC)
+      if STATS_CPU_MEM:
+        getCPULoad(CPU, PROC, sysinfo)
+        getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+      if STATS_CPU_CORE:
+        getCoreStats(CORE, PROC)
 
-    ShowStats(display_flags, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1])
+    ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1])
 
     #Store peak values
     if PEAKVALUES is None:

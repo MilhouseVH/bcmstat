@@ -1,5 +1,12 @@
 #Changelog
 
+##Version 0.1.9 (31/01/2015)
+* Add: Show per-CPU load with `-p`
+* Add: Include CPU type and quantity in summary section
+* Fix: Take multiple CPUs into consideration when calculating system load
+* Chg: Cosmetic, adjust width of Min Freq/Max Freq/Voltages to account for extra decimal on voltage
+* Chg: Cosmetic, reduce spacing between columns to increase data density
+
 ##Version 0.1.8 (18/07/2014)
 * Chg: Also look for config in `~/.config/bcmstat.conf` if not found elsewhere (ie. `~/.bcmstat.conf`)
 
