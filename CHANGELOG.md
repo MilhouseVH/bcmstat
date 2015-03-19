@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.1 (19/03/2015)
+* Chg: Cosmetic - correct help description of core options`p`/`P`
+
 ##Version 0.2.0 (02/02/2015)
 * Chg: Add `W` option in place of `F` to force downloads
 

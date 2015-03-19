@@ -616,22 +616,22 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [g|G] [x|X] [p|P] [s|S] [q] [h] [V|U|W|C]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [s|S] [q|Q] [V|U|W|C] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
   print("d #      Specify interval (in seconds) between each iteration - default is 2")
   print("H #      Header every n iterations (0 = no header, default is 30)")
   print("i iface  Monitor network interface other than the default eth0, eg. br1")
-  print("L        Run at lowest priority (nice +20)")
+  print("L        Run at lowest priority (nice +20) - default")
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
   print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
-  print("p/P      Do (x)/don't (X) monitor individual core load stats (when core count > 1)")
+  print("p/P      Do (p)/don't (P) monitor individual core load stats (when core count > 1)")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
-  print("q/Q      Do (q)/don't (Q) suppress configuraton inforation")
+  print("q/Q      Do (q)/don't (Q) suppress configuraton information")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
@@ -642,7 +642,7 @@ def ShowHelp():
   print()
   print("Set default properties in ~/.bcmstat.conf")
   print()
-  print("Note: Default behaviour is to run at lowest possible priority (nice +19), unless N or M specified.")
+  print("Note: Default behaviour is to run at lowest possible priority (L) unless N or M specified.")
 
 
 #===================
@@ -808,7 +808,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.0"
+  VERSION = "0.2.1"
 
   INTERFACE = "eth0"
   DELAY = 2
