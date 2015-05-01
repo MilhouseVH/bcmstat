@@ -35,7 +35,12 @@
 ################################################################################
 from __future__ import print_function
 import os, sys, datetime, time, errno, subprocess, re, getpass
-import platform, socket, urllib2, hashlib
+import platform, socket, hashlib
+
+if sys.version_info >= (3, 0):
+  import urllib.request as urllib2
+else:
+  import urllib2
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -63,7 +68,10 @@ def printerr(msg, newLine=True):
 
 def runcommand(command, ignore_error=False):
   try:
-    return subprocess.check_output(command.split(" "), stderr=subprocess.STDOUT)[:-1]
+    if sys.version_info >= (3, 0):
+      return subprocess.check_output(command.split(" "), stderr=subprocess.STDOUT).decode("utf-8")[:-1]
+    else:
+      return subprocess.check_output(command.split(" "), stderr=subprocess.STDOUT)[:-1]
   except:
     if ignore_error:
       return None
@@ -808,7 +816,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.1"
+  VERSION = "0.2.2"
 
   INTERFACE = "eth0"
   DELAY = 2

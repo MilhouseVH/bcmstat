@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.2 (01/05/2015)
+* Fix: Python3 compatibility - closes #3
+
 ##Version 0.2.1 (19/03/2015)
 * Chg: Cosmetic - correct help description of core options`p`/`P`
 
