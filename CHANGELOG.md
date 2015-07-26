@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.3 (26/07/2015)
+* Fix: More accurately report core/h264 max freq (take gpu_freq into consideration)
+
 ##Version 0.2.2 (01/05/2015)
 * Fix: Python3 compatibility - closes #3
 

@@ -404,8 +404,8 @@ def getsysinfo():
   sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
   sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
   sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
-  sysinfo["core_max"]   = VCG_INT.get("core_freq",250)
-  sysinfo["h264_max"]   = VCG_INT.get("h264_freq", 250)
+  sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", 250))
+  sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", 250))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", 400)
   sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
   sysinfo["sdram_volt"] = VCG_INT.get("over_voltage_sdram", 0)
@@ -816,7 +816,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.2"
+  VERSION = "0.2.3"
 
   INTERFACE = "eth0"
   DELAY = 2
