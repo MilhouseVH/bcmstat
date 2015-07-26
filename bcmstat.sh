@@ -414,30 +414,31 @@ def getsysinfo():
 
   if sysinfo["force_turbo"]:
     core_min = sysinfo["core_max"]
+    h264_min = sysinfo["h264_max"]
   else:
     core_min = 250
+    h264_min = 250
     core_min = sysinfo["core_max"] if sysinfo["core_max"] < core_min else core_min
+    h264_min = sysinfo["h264_max"] if sysinfo["h264_max"] < h264_min else h264_min
+
   sysinfo["core_min"] = core_min
+  sysinfo["h264_min"] = h264_min
 
   # Calculate thresholds for red/yellow/green colour
+  arch_min = 700 if sysinfo["nproc"] == 1 else 600 # Pi1 / Pi2 arm min
   arm_min = sysinfo["arm_min"] - 10
-  if sysinfo["arm_max"] <= 700:
-    # Should never reach this figure...
-    arm_max = 1e6
-  else:
-    arm_max = sysinfo["arm_max"] - 5
+  arm_max = sysinfo["arm_max"] - 5 if sysinfo["arm_max"] > arch_min else 1e6
 
   core_min = sysinfo["core_min"] - 10
-  if sysinfo["core_max"] <= 250:
-    core_max = 1e6
-  else:
-    core_max = sysinfo["core_max"] - 5
+  core_max = sysinfo["core_max"] - 5 if sysinfo["core_max"] > 250 else 1e6
+
+  h264_min = sysinfo["h264_min"] - 10
+  h264_max = sysinfo["h264_max"] - 5 if sysinfo["h264_max"] > 250 else 1e6
 
   limits = {}
-  limits["arm_min"] = arm_min
-  limits["arm_max"] = arm_max
-  limits["core_min"] = core_min
-  limits["core_max"] = core_max
+  limits["arm"] = (arm_min, arm_max)
+  limits["core"] = (core_min, core_max)
+  limits["h264"] = (h264_min, h264_max)
   sysinfo["limits"] = limits
 
   return sysinfo
@@ -563,16 +564,15 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   TIME = "%02d:%02d:%02d" % (now.hour, now.minute, now.second)
 
   limits = sysinfo["limits"]
-  arm_min = limits["arm_min"]
-  arm_max = limits["arm_max"] 
-  core_min = limits["core_min"]
-  core_max = limits["core_max"]
+  (arm_min, arm_max) = limits["arm"]
+  (core_min, core_max) = limits["core"]
+  (h264_min, h264_max) = limits["h264"]
 
   LINE = "%s %s %s %s %s (%s) %s %s %s" % \
            (TIME,
             colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
             colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
-            colourise(bcm2385[2]/1000000, "%4dMhz",       0,      200,      300, False),
+            colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
             colourise(bcm2385[3]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
             colourise(bcm2385[4]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
             colourise(irq[0],             "%6s",        500,     2500,     5000, True),
@@ -816,7 +816,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.3"
+  VERSION = "0.2.4"
 
   INTERFACE = "eth0"
   DELAY = 2

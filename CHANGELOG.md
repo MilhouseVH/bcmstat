@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.4 (26/07/2015)
+* Fix: And use those correct values when colourising output...
+
 ##Version 0.2.3 (26/07/2015)
 * Fix: More accurately report core/h264 max freq (take gpu_freq into consideration)
 
