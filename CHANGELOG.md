@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.5 (13/08/2015)
+* Chg: Small tweak to support 300Mhz core/gpu freq dynamic overclock when using "stock" clocks
+
 ##Version 0.2.4 (26/07/2015)
 * Fix: And use those correct values when colourising output...
 

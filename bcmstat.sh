@@ -397,6 +397,13 @@ def MHz(value, fwidth, cwidth):
   return ("%*dMHz" % (fwidth, value)).center(cwidth)
 
 def getsysinfo():
+
+  CORE_DEFAULT_IDLE = 250
+  H264_DEFAULT_IDLE = 250
+
+  CORE_DEFAULT_BUSY = 300
+  H264_DEFAULT_BUSY = 300
+
   sysinfo = {}
 
   VCG_INT = vcgencmd_items("get_config int", isInt=True)
@@ -404,8 +411,8 @@ def getsysinfo():
   sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
   sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
   sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
-  sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", 250))
-  sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", 250))
+  sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", CORE_DEFAULT_BUSY))
+  sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", 400)
   sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
   sysinfo["sdram_volt"] = VCG_INT.get("over_voltage_sdram", 0)
@@ -416,24 +423,25 @@ def getsysinfo():
     core_min = sysinfo["core_max"]
     h264_min = sysinfo["h264_max"]
   else:
-    core_min = 250
-    h264_min = 250
+    core_min = CORE_DEFAULT_IDLE
+    h264_min = H264_DEFAULT_IDLE
     core_min = sysinfo["core_max"] if sysinfo["core_max"] < core_min else core_min
     h264_min = sysinfo["h264_max"] if sysinfo["h264_max"] < h264_min else h264_min
 
   sysinfo["core_min"] = core_min
   sysinfo["h264_min"] = h264_min
 
-  # Calculate thresholds for red/yellow/green colour
+  # Calculate thresholds for green/yellow/red colour
   arch_min = 700 if sysinfo["nproc"] == 1 else 600 # Pi1 / Pi2 arm min
+
   arm_min = sysinfo["arm_min"] - 10
   arm_max = sysinfo["arm_max"] - 5 if sysinfo["arm_max"] > arch_min else 1e6
 
   core_min = sysinfo["core_min"] - 10
-  core_max = sysinfo["core_max"] - 5 if sysinfo["core_max"] > 250 else 1e6
+  core_max = sysinfo["core_max"] - 5 if sysinfo["core_max"] > CORE_DEFAULT_IDLE else 1e6
 
   h264_min = sysinfo["h264_min"] - 10
-  h264_max = sysinfo["h264_max"] - 5 if sysinfo["h264_max"] > 250 else 1e6
+  h264_max = sysinfo["h264_max"] - 5 if sysinfo["h264_max"] > H264_DEFAULT_IDLE else 1e6
 
   limits = {}
   limits["arm"] = (arm_min, arm_max)
@@ -816,7 +824,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.4"
+  VERSION = "0.2.5"
 
   INTERFACE = "eth0"
   DELAY = 2
