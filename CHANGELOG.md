@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.6 (13/08/2015)
+* Chg: More tweaks: support disable_auto_turbo
+
 ##Version 0.2.5 (13/08/2015)
 * Chg: Small tweak to support 300Mhz core/gpu freq dynamic overclock when using "stock" clocks
 

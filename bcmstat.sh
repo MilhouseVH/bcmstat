@@ -398,22 +398,34 @@ def MHz(value, fwidth, cwidth):
 
 def getsysinfo():
 
-  CORE_DEFAULT_IDLE = 250
-  H264_DEFAULT_IDLE = 250
-
-  CORE_DEFAULT_BUSY = 300
-  H264_DEFAULT_BUSY = 300
-
   sysinfo = {}
 
+  HARDWARE = grep("^Hardware[ \t]*:", readfile("/proc/cpuinfo"), 1) # BCM2708, BCM2709
+  RPI_MODEL = "rpi1" if HARDWARE == "BCM2708" else "rpi2"
+  
   VCG_INT = vcgencmd_items("get_config int", isInt=True)
 
+  CORE_DEFAULT_IDLE = CORE_DEFAULT_BUSY = 250
+  H264_DEFAULT_IDLE = H264_DEFAULT_BUSY = 250
+
+  if VCG_INT.get("disable_auto_turbo", 0) == 0:
+    CORE_DEFAULT_BUSY += 50
+    H264_DEFAULT_BUSY += 50
+
+  if RPI_MODEL == "rpi1":
+    ARM_DEFAULT_IDLE = 700
+    SDRAM_DEFAULT = 400
+  else:
+    ARM_DEFAULT_IDLE = 600
+    SDRAM_DEFAULT = 450
+
+  sysinfo["hardware"]   = RPI_MODEL
   sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
   sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
   sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
   sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", CORE_DEFAULT_BUSY))
   sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
-  sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", 400)
+  sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", SDRAM_DEFAULT)
   sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
   sysinfo["sdram_volt"] = VCG_INT.get("over_voltage_sdram", 0)
   sysinfo["temp_limit"] = VCG_INT.get("temp_limit", 85)
@@ -432,10 +444,8 @@ def getsysinfo():
   sysinfo["h264_min"] = h264_min
 
   # Calculate thresholds for green/yellow/red colour
-  arch_min = 700 if sysinfo["nproc"] == 1 else 600 # Pi1 / Pi2 arm min
-
   arm_min = sysinfo["arm_min"] - 10
-  arm_max = sysinfo["arm_max"] - 5 if sysinfo["arm_max"] > arch_min else 1e6
+  arm_max = sysinfo["arm_max"] - 5 if sysinfo["arm_max"] > ARM_DEFAULT_IDLE else 1e6
 
   core_min = sysinfo["core_min"] - 10
   core_max = sysinfo["core_max"] - 5 if sysinfo["core_max"] > CORE_DEFAULT_IDLE else 1e6
@@ -481,7 +491,7 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   FIRMWARE   = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
 
   OTHER_VARS = ["temp_limit=%d" % TEMP_LIMIT]
-  for item in ["force_turbo", "initial_turbo", "avoid_pwm_pll",
+  for item in ["force_turbo", "initial_turbo", "disable_auto_turbo", "avoid_pwm_pll",
                "hdmi_force_hotplug", "hdmi_force_edid_audio", "no_hdmi_resample"]:
     if VCG_INT.get(item, 0) != 0:
       OTHER_VARS.append("%s=%d" % (item, VCG_INT.get(item, 0)))
@@ -824,7 +834,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.5"
+  VERSION = "0.2.6"
 
   INTERFACE = "eth0"
   DELAY = 2
