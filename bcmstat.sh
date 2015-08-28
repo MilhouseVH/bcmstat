@@ -397,7 +397,7 @@ def MHz(value, fwidth, cwidth):
   return ("%*dMHz" % (fwidth, value)).center(cwidth)
 
 def MaxSDRAMVolts():
-  vRAM = 0
+  vRAM = "1.2000V"
   for item in ["sdram_p", "sdram_c", "sdram_i"]:
     item_v = vcgencmd("measure_volts %s" % item)
     vRAM = item_v if item_v > vRAM else vRAM
@@ -845,7 +845,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.7"
+  VERSION = "0.2.8"
 
   INTERFACE = "eth0"
   DELAY = 2
