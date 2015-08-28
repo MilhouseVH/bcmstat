@@ -404,7 +404,7 @@ def MaxSDRAMVolts():
   return vRAM
 
 def MaxSDRAMOffset():
-  return int((float(MaxSDRAMVolts()[:-1]) - 1.2) / 0.025)
+  return int((float(MaxSDRAMVolts()[:-1]) * 10000 - 12000) / 250)
 
 def getsysinfo():
 
@@ -845,7 +845,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.8"
+  VERSION = "0.2.9"
 
   INTERFACE = "eth0"
   DELAY = 2
