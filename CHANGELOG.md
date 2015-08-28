@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.2.7 (13/08/2015)
+* Chg: Update way in which `over_volatage_sdram` is determined. Now take the maximum measured voltage - `sdram_p` (pysical), `sdram_c` (controller) and `sdram_i` (IO]) - then calculate the sdram over voltage offset that would be required to achieve this voltage. This method does result in a non-overclocked RPi2 showing +1, as `over_volatage_sdram_p` is slightly overclocked by default.
+
 ##Version 0.2.6 (13/08/2015)
 * Chg: More tweaks: support disable_auto_turbo
 

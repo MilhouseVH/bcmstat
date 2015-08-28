@@ -396,6 +396,16 @@ def ceildiv(a, b):
 def MHz(value, fwidth, cwidth):
   return ("%*dMHz" % (fwidth, value)).center(cwidth)
 
+def MaxSDRAMVolts():
+  vRAM = 0
+  for item in ["sdram_p", "sdram_c", "sdram_i"]:
+    item_v = vcgencmd("measure_volts %s" % item)
+    vRAM = item_v if item_v > vRAM else vRAM
+  return vRAM
+
+def MaxSDRAMOffset():
+  return int((float(MaxSDRAMVolts()[:-1]) - 1.2) / 0.025)
+
 def getsysinfo():
 
   sysinfo = {}
@@ -427,7 +437,7 @@ def getsysinfo():
   sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", SDRAM_DEFAULT)
   sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
-  sysinfo["sdram_volt"] = VCG_INT.get("over_voltage_sdram", 0)
+  sysinfo["sdram_volt"] = MaxSDRAMOffset()
   sysinfo["temp_limit"] = VCG_INT.get("temp_limit", 85)
   sysinfo["force_turbo"]= (VCG_INT.get("force_turbo", 0) != 0)
 
@@ -486,7 +496,8 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   TEMP_LIMIT = sysinfo["temp_limit"]
   FORCE_TURBO= sysinfo["force_turbo"]
   vCore      = vcgencmd("measure_volts core")
-  vRAM       = vcgencmd("measure_volts sdram_c")
+  vRAM       = MaxSDRAMVolts()
+
   GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
   FIRMWARE   = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
 
@@ -834,7 +845,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.6"
+  VERSION = "0.2.7"
 
   INTERFACE = "eth0"
   DELAY = 2
