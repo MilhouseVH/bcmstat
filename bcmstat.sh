@@ -528,6 +528,9 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   print("Min Freq: | %s | %s | %s | %s |" % (MHz(ARM_MIN,4,7), MHz(CORE_MIN,3,6), MHz(0,3,6),        MHz(SDRAM_MAX,3,11)))
   print("Max Freq: | %s | %s | %s | %s |" % (MHz(ARM_MAX,4,7), MHz(CORE_MAX,3,6), MHz(H264_MAX,3,6), MHz(SDRAM_MAX,3,11)))
 
+  if vCore and (len(vCore) - vCore.find(".")) < 5:
+    vCore = "%s00V" % vCore[:-1]
+
   v1 = "%d, %s" % (ARM_VOLT, vCore)
   v2 = "%d, %s" % (SDRAM_VOLT, vRAM)
   v1 = "+%s" % v1 if ARM_VOLT > 0 else v1
