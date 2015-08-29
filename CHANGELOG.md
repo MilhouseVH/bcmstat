@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.1 (29/08/2015)
+* Fix: Damn...old firmware.
+
 ##Version 0.3.0 (29/08/2015)
 * Fix: Bah. Use integer maths and allow a small 50mV variance in the detected sdram voltage
 

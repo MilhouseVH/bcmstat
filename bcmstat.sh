@@ -400,6 +400,8 @@ def MaxSDRAMVolts():
   vRAM = "1.2000V"
   for item in ["sdram_p", "sdram_c", "sdram_ix"]:
     item_v = vcgencmd("measure_volts %s" % item)
+    if item_v and (len(item_v) - item_v.find(".")) < 5:
+      item_v = "%s00V" % item_v[:-1]
     vRAM = item_v if item_v and item_v > vRAM else vRAM
   return vRAM
 
@@ -846,7 +848,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.0"
+  VERSION = "0.3.1"
 
   INTERFACE = "eth0"
   DELAY = 2
