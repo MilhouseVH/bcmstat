@@ -398,13 +398,14 @@ def MHz(value, fwidth, cwidth):
 
 def MaxSDRAMVolts():
   vRAM = "1.2000V"
-  for item in ["sdram_p", "sdram_c", "sdram_i"]:
+  for item in ["sdram_p", "sdram_c", "sdram_ix"]:
     item_v = vcgencmd("measure_volts %s" % item)
-    vRAM = item_v if item_v > vRAM else vRAM
+    vRAM = item_v if item_v and item_v > vRAM else vRAM
   return vRAM
 
+# Calculate offset from voltage, allowing for 50mV of variance
 def MaxSDRAMOffset():
-  return int((float(MaxSDRAMVolts()[:-1]) * 10000 - 12000) / 250)
+  return (int(MaxSDRAMVolts()[:-1].replace(".", "")) - 12000 + 50) / 250
 
 def getsysinfo():
 
@@ -845,7 +846,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.2.9"
+  VERSION = "0.3.0"
 
   INTERFACE = "eth0"
   DELAY = 2

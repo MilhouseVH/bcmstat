@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.0 (29/08/2015)
+* Fix: Bah. Use integer maths and allow a small 50mV variance in the detected sdram voltage
+
 ##Version 0.2.9 (28/08/2015)
 * Fix: Fix rounding error when sdram voltage is 1.4000V - calculated offset is 7 (from `int(7.999999)`), when should be 8.
 
