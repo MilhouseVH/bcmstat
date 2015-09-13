@@ -608,8 +608,8 @@ def ShowHeadings(display_flags, sysinfo):
       HDR2 = "%s=======" % HDR2
 
   if display_flags["deltas"]:
-    HDR1 = "%s Delta GPU/RAM Free Bytes" % HDR1
-    HDR2 = "%s ========================" % HDR2
+    HDR1 = "%s Delta GPU B      Mem kB" % HDR1
+    HDR2 = "%s =======================" % HDR2
 
   printn("%s\n%s" % (HDR1, HDR2))
 
@@ -695,7 +695,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
     else:
       cgpu = 0
 
-    LINE = "%s %s /%s" % \
+    LINE = "%s %s %s" % \
              (LINE,
               colourise(dgpu, "%11s",  1, None, 2, True, compare=cgpu, addSign=True),
               colourise(dmem, "%11s",  1, None, 2, True, compare=cmem, addSign=True))
@@ -896,7 +896,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.2"
+  VERSION = "0.3.3"
 
   INTERFACE = "eth0"
   DELAY = 2
