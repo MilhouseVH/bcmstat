@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.2 (13/09/2015)
+* Add: `D` option to display GPU and ARM memory deltas - memory allocation is shown as negative/red values, while memory freed will be shown as positive/green values. Continuous allocations with no sign of memory being free would suggest memory leakage.
+
 ##Version 0.3.1 (29/08/2015)
 * Fix: Damn...old firmware.
 

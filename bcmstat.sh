@@ -165,10 +165,12 @@ def tobytes(value):
   else:
     return int(value)
 
-def colourise(display, nformat, green, yellow, red, withcomma, compare=None):
+def colourise(display, nformat, green, yellow, red, withcomma, compare=None, addSign=False):
   global COLOUR
 
   cnum = format(display, ",d") if withcomma else display
+  if addSign and display > 0:
+    cnum = "+%s" % cnum
   number = compare if compare is not None else display
 
   if COLOUR:
@@ -388,7 +390,22 @@ def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
       percent_free_m = (float(bfreemem_m)/float(GPU_ALLOCATED_M))*100
     data["malloc"] = [freemem_m, bfreemem_m, int(percent_free_m), GPU_ALLOCATED_M]
 
-  storage[0] = (time.time(), data)
+  storage[2] = storage[1]
+  storage[1] = (time.time(), data)
+
+  if storage[2][0] != 0:
+    storage[0] = (storage[1][0] - storage[2][0], data)
+
+def getMemDeltas(storage, MEM, GPU):
+  storage[2] = storage[1]
+  storage[1] = (time.time(), MEM[1], GPU[1])
+
+  if storage[2][0] != 0:
+    s1 = storage[1]
+    s2 = storage[2]
+    dTime = s1[0] - s2[0]
+    dTime = 1 if dTime <= 0 else dTime
+    storage[0] = (dTime, (s1[1][1][1] - s2[1][1][1], s1[2][1]["reloc"][1] - s2[2][1]["reloc"][1]))
 
 def ceildiv(a, b):
   return -(-a // b)
@@ -590,9 +607,13 @@ def ShowHeadings(display_flags, sysinfo):
       HDR1 = "%s(SwUse)" % HDR1
       HDR2 = "%s=======" % HDR2
 
+  if display_flags["deltas"]:
+    HDR1 = "%s Delta GPU/RAM Free Bytes" % HDR1
+    HDR2 = "%s ========================" % HDR2
+
   printn("%s\n%s" % (HDR1, HDR2))
 
-def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gpumem, cores):
+def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
   global ARM_MIN, ARM_MAX
 
   now = datetime.datetime.now()
@@ -656,10 +677,33 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
               (LINE,
                colourise(memory[4],  "%4.1f%%",  1,  5, 15, False, compare=memory[4]))
 
+  if display_flags["deltas"]:
+    dmem = deltas[0]
+    dgpu = deltas[1]
+
+    if  dmem < 0:
+      cmem = 2
+    elif dmem > 0:
+      cmem = 1
+    else:
+      cmem = 0
+
+    if  dgpu < 0:
+      cgpu = 2
+    elif dgpu > 0:
+      cgpu = 1
+    else:
+      cgpu = 0
+
+    LINE = "%s %s /%s" % \
+             (LINE,
+              colourise(dgpu, "%11s",  1, None, 2, True, compare=cgpu, addSign=True),
+              colourise(dmem, "%11s",  1, None, 2, True, compare=cmem, addSign=True))
+
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [s|S] [q|Q] [V|U|W|C] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [D] [s|S] [q|Q] [V|U|W|C] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -675,6 +719,7 @@ def ShowHelp():
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
   print("q/Q      Do (q)/don't (Q) suppress configuraton information")
+  print("D        Show delta memory - negative: memory allocated, positive: memory freed")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
@@ -851,7 +896,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.1"
+  VERSION = "0.3.2"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -866,6 +911,8 @@ def main(args):
   STATS_CPU_CORE= False
   STATS_GPU_R = False
   STATS_GPU_M = False
+
+  STATS_DELTAS = False
 
   CHECK_UPDATE = True
 
@@ -939,9 +986,12 @@ def main(args):
       STATS_CPU_MEM = False
 
     elif a1 == "p":
-      STATS_CPU_CORE= True
+      STATS_CPU_CORE = True
     elif a1 == "P":
-      STATS_CPU_CORE= False
+      STATS_CPU_CORE = False
+
+    elif a1 == "D":
+      STATS_DELTAS = True
 
     elif a1 == "s":
       INCLUDE_SWAP = True
@@ -1028,6 +1078,7 @@ def main(args):
   MEM = [(0, None), (0, None), (0, None)]
   GPU = [(0, None), (0, None), (0, None)]
   CORE= [(0, None), (0, None), (0, None)]
+  DELTAS=[(0, None), (0, None), (0, None)]
 
   getBCM2835(BCM)
   getIRQ(IRQ)
@@ -1037,10 +1088,20 @@ def main(args):
     printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
     sys.exit(2)
 
-  if STATS_CPU_MEM or STATS_CPU_CORE:
+  if STATS_CPU_MEM or STATS_CPU_CORE or STATS_DELTAS:
     getProcStats(PROC)
-    if STATS_CPU_MEM:
+    if STATS_CPU_MEM or STATS_DELTAS:
       getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+
+  if STATS_GPU_R or STATS_GPU_M:
+    getGPUMem(GPU, STATS_GPU_R or STATS_DELTAS, STATS_GPU_M)
+
+  if STATS_DELTAS:
+    if not STATS_CPU_MEM:
+      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+    if not (STATS_GPU_R or STATS_GPU_M):
+      getGPUMem(GPU, True, STATS_GPU_M)
+    getMemDeltas(DELTAS, MEM, GPU)
 
   count = HDREVERY
   firsthdr = True
@@ -1049,7 +1110,8 @@ def main(args):
                    "cpu_cores":  STATS_CPU_CORE,
                    "gpu_reloc":  STATS_GPU_R,
                    "gpu_malloc": STATS_GPU_M,
-                   "swap":       (SWAP_ENABLED and INCLUDE_SWAP)}
+                   "swap":       (SWAP_ENABLED and INCLUDE_SWAP),
+                   "deltas":     STATS_DELTAS}
 
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
@@ -1064,7 +1126,7 @@ def main(args):
     getNetwork(NET, INTERFACE)
 
     if STATS_GPU_R or STATS_GPU_M:
-      getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
+      getGPUMem(GPU, STATS_GPU_R or STATS_DELTAS, STATS_GPU_M)
 
     if STATS_CPU_MEM or STATS_CPU_CORE:
       getProcStats(PROC)
@@ -1074,7 +1136,14 @@ def main(args):
       if STATS_CPU_CORE:
         getCoreStats(CORE, PROC)
 
-    ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1])
+    if STATS_DELTAS:
+      if not STATS_CPU_MEM:
+        getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+      if not (STATS_GPU_R or STATS_GPU_M):
+        getGPUMem(GPU, True, STATS_GPU_M)
+      getMemDeltas(DELTAS, MEM, GPU)
+
+    ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
 
     #Store peak values
     if PEAKVALUES is None:
