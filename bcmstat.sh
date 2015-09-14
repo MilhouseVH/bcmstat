@@ -580,18 +580,7 @@ def ShowHeadings(display_flags, sysinfo):
   HDR1 = "Time         ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s"
   HDR2 = "======== ======= ======= ======= =============== ====== ========== =========="
 
-  if display_flags["gpu_reloc"]:
-    if display_flags["gpu_malloc"]:
-      HDR1 = "%s Reloc  Free" % HDR1
-    else:
-      HDR1 = "%s GPUMem Free" % HDR1
-    HDR2 = "%s ===========" % HDR2
-
-  if display_flags["gpu_malloc"]:
-    HDR1 = "%s Malloc Free" % HDR1
-    HDR2 = "%s ===========" % HDR2
-
-  if display_flags["cpu_mem"]:
+  if display_flags["utilisation"]:
     HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
     HDR2 = "%s ====== ====== ====== ====== ====== ====== ====== ======" % HDR2
 
@@ -599,6 +588,17 @@ def ShowHeadings(display_flags, sysinfo):
     for i in range(0, sysinfo["nproc"]):
       HDR1 = "%s   cpu%d" % (HDR1, i)
       HDR2 = "%s ======" % HDR2
+
+  if display_flags["gpu_malloc"]:
+    HDR1 = "%s Malloc Free" % HDR1
+    HDR2 = "%s ===========" % HDR2
+
+  if display_flags["gpu_reloc"]:
+    if display_flags["gpu_malloc"]:
+      HDR1 = "%s Reloc  Free" % HDR1
+    else:
+      HDR1 = "%s GPUMem Free" % HDR1
+    HDR2 = "%s ===========" % HDR2
 
   if display_flags["cpu_mem"]:
     HDR1 = "%s Memory Free/Used" % HDR1
@@ -635,21 +635,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
             colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
             colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
 
-  if display_flags["gpu_reloc"]:
-    data = gpumem["reloc"]
-    LINE = "%s %s (%s)" % \
-             (LINE,
-              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
-              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
-
-  if display_flags["gpu_malloc"]:
-    data = gpumem["malloc"]
-    LINE = "%s %s (%s)" % \
-             (LINE,
-              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
-              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
-
-  if display_flags["cpu_mem"]:
+  if display_flags["utilisation"]:
     LINE = "%s %s %s %s %s %s %s %s %s" % \
              (LINE,
               colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
@@ -664,6 +650,20 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   if display_flags["cpu_cores"]:
     for core in cores:
       LINE = "%s %s" % (LINE, colourise(core[1], "%6.2f",    30, 50, 70, False))
+
+  if display_flags["gpu_malloc"]:
+    data = gpumem["malloc"]
+    LINE = "%s %s (%s)" % \
+             (LINE,
+              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
+              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
+
+  if display_flags["gpu_reloc"]:
+    data = gpumem["reloc"]
+    LINE = "%s %s (%s)" % \
+             (LINE,
+              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
+              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
 
   if display_flags["cpu_mem"]:
     LINE = "%s %s/%s" % \
@@ -896,18 +896,19 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.3"
+  VERSION = "0.3.4"
 
   INTERFACE = "eth0"
   DELAY = 2
   HDREVERY = 30
 
-  COLOUR = False
+  COLOUR = True
   QUIET = False
   NICE_ADJUST = +20
   INCLUDE_SWAP = True
 
   STATS_CPU_MEM = False
+  STATS_UTILISATION = False
   STATS_CPU_CORE= False
   STATS_GPU_R = False
   STATS_GPU_M = False
@@ -982,8 +983,10 @@ def main(args):
 
     elif a1 == "x":
       STATS_CPU_MEM = True
+      STATS_UTILISATION = True
     elif a1 == "X":
       STATS_CPU_MEM = False
+      STATS_UTILISATION = False
 
     elif a1 == "p":
       STATS_CPU_CORE = True
@@ -1088,25 +1091,27 @@ def main(args):
     printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
     sys.exit(2)
 
-  if STATS_CPU_MEM or STATS_CPU_CORE or STATS_DELTAS:
+  if STATS_DELTAS:
+    STATS_CPU_MEM = True
+    STATS_GPU_R = True
+
+  if STATS_CPU_CORE or STATS_UTILISATION:
     getProcStats(PROC)
-    if STATS_CPU_MEM or STATS_DELTAS:
-      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+
+  if STATS_CPU_MEM or STATS_DELTAS:
+    getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
 
   if STATS_GPU_R or STATS_GPU_M:
-    getGPUMem(GPU, STATS_GPU_R or STATS_DELTAS, STATS_GPU_M)
+    getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
   if STATS_DELTAS:
-    if not STATS_CPU_MEM:
-      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
-    if not (STATS_GPU_R or STATS_GPU_M):
-      getGPUMem(GPU, True, STATS_GPU_M)
     getMemDeltas(DELTAS, MEM, GPU)
 
   count = HDREVERY
   firsthdr = True
 
   display_flags = {"cpu_mem":    STATS_CPU_MEM,
+                   "utilisation": STATS_UTILISATION,
                    "cpu_cores":  STATS_CPU_CORE,
                    "gpu_reloc":  STATS_GPU_R,
                    "gpu_malloc": STATS_GPU_M,
@@ -1125,22 +1130,22 @@ def main(args):
     getIRQ(IRQ)
     getNetwork(NET, INTERFACE)
 
-    if STATS_GPU_R or STATS_GPU_M:
-      getGPUMem(GPU, STATS_GPU_R or STATS_DELTAS, STATS_GPU_M)
-
-    if STATS_CPU_MEM or STATS_CPU_CORE:
+    if STATS_CPU_CORE or STATS_UTILISATION:
       getProcStats(PROC)
-      if STATS_CPU_MEM:
-        getCPULoad(CPU, PROC, sysinfo)
-        getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
-      if STATS_CPU_CORE:
-        getCoreStats(CORE, PROC)
+
+    if STATS_CPU_CORE:
+      getCoreStats(CORE, PROC)
+
+    if STATS_UTILISATION:
+      getCPULoad(CPU, PROC, sysinfo)
+
+    if STATS_CPU_MEM:
+      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+
+    if STATS_GPU_R or STATS_GPU_M:
+      getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
     if STATS_DELTAS:
-      if not STATS_CPU_MEM:
-        getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
-      if not (STATS_GPU_R or STATS_GPU_M):
-        getGPUMem(GPU, True, STATS_GPU_M)
       getMemDeltas(DELTAS, MEM, GPU)
 
     ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])

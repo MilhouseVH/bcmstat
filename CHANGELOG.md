@@ -1,5 +1,10 @@
 #Changelog
 
+##Version 0.3.4 (14/09/2015)
+* Chg: Make colourised output the default. Disable with `m`
+* Chg: Relocate GPU mem columns so that all memory stats are displayed along side each other (when enabled)
+* Chg: Automatically include the GPU (reloc) and ARM memory stats when using option `D`, if not already enabled by `g`/`x` - results in potentially more compact and useful display (eg. `Dd10`)
+
 ##Version 0.3.3 (13/09/2015)
 * Fix: Mem delta is in kB not bytes
 
