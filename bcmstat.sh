@@ -608,7 +608,7 @@ def ShowHeadings(display_flags, sysinfo):
       HDR2 = "%s=======" % HDR2
 
   if display_flags["deltas"]:
-    HDR1 = "%s Delta GPU B      Mem kB" % HDR1
+    HDR1 = "%s Delta  GPU B     Mem kB" % HDR1
     HDR2 = "%s =======================" % HDR2
 
   printn("%s\n%s" % (HDR1, HDR2))
@@ -697,8 +697,8 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
 
     LINE = "%s %s %s" % \
              (LINE,
-              colourise(dgpu, "%11s",  1, None, 2, True, compare=cgpu, addSign=True),
-              colourise(dmem, "%11s",  1, None, 2, True, compare=cmem, addSign=True))
+              colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True),
+              colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True))
 
   printn("\n%s" % LINE)
 
@@ -896,7 +896,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.4"
+  VERSION = "0.3.5"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -927,7 +927,7 @@ def main(args):
   elif os.path.exists(config2):
     args.insert(0, readfile(config2))
 
-  # Crude attempt at argument parsing as I don't want use argparse
+  # Crude attempt at argument parsing as I don't want to use argparse
   # but instead try and keep it vaguely more shell-like, ie. -xcd10
   # rather than -x -c -d 10 etc.
   argp = [("", "")]

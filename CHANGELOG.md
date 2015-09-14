@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.5 (14/09/2015)
+* Fix: Cosmetic
+
 ##Version 0.3.4 (14/09/2015)
 * Chg: Make colourised output the default. Disable with `m`
 * Chg: Relocate GPU mem columns so that all memory stats are displayed along side each other (when enabled)
