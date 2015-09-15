@@ -400,12 +400,16 @@ def getMemDeltas(storage, MEM, GPU):
   storage[2] = storage[1]
   storage[1] = (time.time(), MEM[1], GPU[1])
 
-  if storage[2][0] != 0:
+  if storage[2][0] == 0:
+    storage[0] = (0, (0, 0, 0, 0))
+  else:
     s1 = storage[1]
     s2 = storage[2]
     dTime = s1[0] - s2[0]
     dTime = 1 if dTime <= 0 else dTime
-    storage[0] = (dTime, (s1[1][1][1] - s2[1][1][1], s1[2][1]["reloc"][1] - s2[2][1]["reloc"][1]))
+    dMem = s1[1][1][1] - s2[1][1][1]
+    dGPU = s1[2][1]["reloc"][1] - s2[2][1]["reloc"][1]
+    storage[0] = (dTime, (dMem, dGPU, storage[0][1][2] + dMem, storage[0][1][3] + dGPU))
 
 def ceildiv(a, b):
   return -(-a // b)
@@ -611,6 +615,10 @@ def ShowHeadings(display_flags, sysinfo):
     HDR1 = "%s Delta  GPU B     Mem kB" % HDR1
     HDR2 = "%s =======================" % HDR2
 
+  if display_flags["accumulated"]:
+    HDR1 = "%s Accum  GPU B     Mem kB" % HDR1
+    HDR2 = "%s =======================" % HDR2
+
   printn("%s\n%s" % (HDR1, HDR2))
 
 def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
@@ -700,10 +708,33 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
               colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True),
               colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True))
 
+  if display_flags["accumulated"]:
+    dmem = deltas[2]
+    dgpu = deltas[3]
+
+    if  dmem < 0:
+      cmem = 2
+    elif dmem > 0:
+      cmem = 1
+    else:
+      cmem = 0
+
+    if  dgpu < 0:
+      cgpu = 2
+    elif dgpu > 0:
+      cgpu = 1
+    else:
+      cgpu = 0
+
+    LINE = "%s %s %s" % \
+             (LINE,
+              colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True),
+              colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True))
+
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [D] [s|S] [q|Q] [V|U|W|C] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -720,11 +751,14 @@ def ShowHelp():
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
   print("q/Q      Do (q)/don't (Q) suppress configuraton information")
   print("D        Show delta memory - negative: memory allocated, positive: memory freed")
+  print("D        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
   print("W        Force update to latest version")
   print("C        Disable auto-update")
+  print()
+  print("Z        Ignore any default configuration")
   print()
   print("h        Print this help")
   print()
@@ -896,7 +930,7 @@ def main(args):
 
   GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
   ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.5"
+  VERSION = "0.3.6"
 
   INTERFACE = "eth0"
   DELAY = 2
@@ -914,18 +948,37 @@ def main(args):
   STATS_GPU_M = False
 
   STATS_DELTAS = False
+  STATS_ACCUMULATED = False
 
   CHECK_UPDATE = True
 
+  IGNORE_DEFAULTS = False
+
+  # Pre-process command line args to determine if we should
+  # ignored the stored defaults
+  VALUE = False
+  for x in " ".join(args):
+    if x == " ":
+      VALUE = False
+      continue
+
+    if not (VALUE or (x >= "0" and x <= "9")):
+      if x == "Z":
+        IGNORE_DEFAULTS = True
+        break
+      VALUE = x in ["i", "d", "h"]
+
+  oargs = args
+
   # Read default settings from config file
   # Can be overidden by command line.
-  oargs = args
-  config1 = os.path.expanduser("~/.bcmstat.conf")
-  config2 = os.path.expanduser("~/.config/bcmstat.conf")
-  if os.path.exists(config1):
-    args.insert(0, readfile(config1))
-  elif os.path.exists(config2):
-    args.insert(0, readfile(config2))
+  if IGNORE_DEFAULTS == False:
+    config1 = os.path.expanduser("~/.bcmstat.conf")
+    config2 = os.path.expanduser("~/.config/bcmstat.conf")
+    if os.path.exists(config1):
+      args.insert(0, readfile(config1))
+    elif os.path.exists(config2):
+      args.insert(0, readfile(config2))
 
   # Crude attempt at argument parsing as I don't want to use argparse
   # but instead try and keep it vaguely more shell-like, ie. -xcd10
@@ -996,6 +1049,9 @@ def main(args):
     elif a1 == "D":
       STATS_DELTAS = True
 
+    elif a1 == "A":
+      STATS_ACCUMULATED = True
+
     elif a1 == "s":
       INCLUDE_SWAP = True
     elif a1 == "S":
@@ -1022,7 +1078,7 @@ def main(args):
       ShowHelp()
       return
 
-    elif a1 == "-":
+    elif a1 in ["-", "Z"]:
       pass
 
     else:
@@ -1091,32 +1147,33 @@ def main(args):
     printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
     sys.exit(2)
 
-  if STATS_DELTAS:
+  if STATS_DELTAS or STATS_ACCUMULATED:
     STATS_CPU_MEM = True
     STATS_GPU_R = True
 
   if STATS_CPU_CORE or STATS_UTILISATION:
     getProcStats(PROC)
 
-  if STATS_CPU_MEM or STATS_DELTAS:
+  if STATS_CPU_MEM:
     getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
 
   if STATS_GPU_R or STATS_GPU_M:
     getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
-  if STATS_DELTAS:
+  if STATS_DELTAS or STATS_ACCUMULATED:
     getMemDeltas(DELTAS, MEM, GPU)
 
   count = HDREVERY
   firsthdr = True
 
-  display_flags = {"cpu_mem":    STATS_CPU_MEM,
+  display_flags = {"cpu_mem":     STATS_CPU_MEM,
                    "utilisation": STATS_UTILISATION,
-                   "cpu_cores":  STATS_CPU_CORE,
-                   "gpu_reloc":  STATS_GPU_R,
-                   "gpu_malloc": STATS_GPU_M,
-                   "swap":       (SWAP_ENABLED and INCLUDE_SWAP),
-                   "deltas":     STATS_DELTAS}
+                   "cpu_cores":   STATS_CPU_CORE,
+                   "gpu_reloc":   STATS_GPU_R,
+                   "gpu_malloc":  STATS_GPU_M,
+                   "swap":        (SWAP_ENABLED and INCLUDE_SWAP),
+                   "deltas":      STATS_DELTAS,
+                   "accumulated": STATS_ACCUMULATED}
 
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
@@ -1145,7 +1202,7 @@ def main(args):
     if STATS_GPU_R or STATS_GPU_M:
       getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
 
-    if STATS_DELTAS:
+    if STATS_DELTAS or STATS_ACCUMULATED:
       getMemDeltas(DELTAS, MEM, GPU)
 
     ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])

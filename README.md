@@ -11,7 +11,7 @@ Simple Raspberry Pi command line monitoring tool:
 * CPU load (including individual cores when available)
 * GPU mem usage
 * RAM usage (with/without swap)
-* Memory leak detection (`D` option)
+* Memory leak detection (`D`/`A` options - instantaneous and accumulated memory deltas)
 
 Tested with Raspbian, OpenELEC and Raspbmc.
 

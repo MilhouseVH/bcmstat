@@ -1,5 +1,9 @@
 #Changelog
 
+##Version 0.3.6 (15/09/2015)
+* Add: `Z` option to temporarily ignore a default configuration file
+* Add: `A` option to show accumulated memory deltas (can be used in combination with `D`)
+
 ##Version 0.3.5 (14/09/2015)
 * Fix: Cosmetic
 
