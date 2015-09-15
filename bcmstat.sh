@@ -751,7 +751,7 @@ def ShowHelp():
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
   print("q/Q      Do (q)/don't (Q) suppress configuraton information")
   print("D        Show delta memory - negative: memory allocated, positive: memory freed")
-  print("D        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
+  print("A        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
