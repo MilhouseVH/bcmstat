@@ -35,17 +35,17 @@ chmod +x ~/bcmstat.sh
 ######Example output:
 ```
 rpi2:~ # ./bcmstat.sh xgpd10
-  Config: v0.3.4, args "xgpd10", priority lowest (+19)
-     CPU: 4 x ARMv7 cores available, using ondemand governor
+  Config: v0.3.7, args "Cxgpd10", priority lowest (+19)
+   Board: 4 x ARMv7 cores available, ondemand governor (Pi3 rev 1.2, BCM2837 SoC with 1GB RAM by Sony)
   Memory: 1008MB (split 688MB ARM, 320MB GPU)
 HW Block: |   ARM   |  Core  |  H264  |    SDRAM    |
-Min Freq: | 1000MHz | 500MHz |   0MHz |    450MHz   |
-Max Freq: | 1000MHz | 500MHz | 400MHz |    450MHz   |
-Voltages: |        +4, 1.3940V        | +1, 1.2250V |
-   Other: temp_limit=85, force_turbo=1, avoid_pwm_pll=1
-Firmware: Sep 9 2015 23:05:32, version de72f07669414925f3fde745fb860bc5d4d193d8 (clean) (release)
+Min Freq: | 1200MHz | 500MHz |   0MHz |    500MHz   |
+Max Freq: | 1200MHz | 500MHz | 400MHz |    500MHz   |
+Voltages: |         0, 1.3750V        | +2, 1.2500V |
+   Other: temp_limit=85, force_turbo=1
+Firmware: Feb 25 2016 18:56:38, version dea971b793dd6cf89133ede5a8362eb77e4f4ade (clean) (release)
   Codecs: H264 WVC1 MPG2 VP8 VORBIS MJPG
-  Booted: Sun Sep 13 23:23:22 2015
+  Booted: Thu Feb 25 22:14:50 2016
 
 Time         ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s  %user  %nice   %sys  %idle  %iowt   %irq %s/irq %total   cpu0   cpu1   cpu2   cpu3 GPUMem Free Memory Free/Used
 ======== ======= ======= ======= =============== ====== ========== ========== ====== ====== ====== ====== ====== ====== ====== ====== ====== ====== ====== ====== =========== ================

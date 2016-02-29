@@ -19,7 +19,7 @@
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
-# Simple utility to monitor Raspberry Pi BCM2835 SoC, network, CPU and memory statistics
+# Simple utility to monitor Raspberry Pi BCM283X SoC, network, CPU and memory statistics
 #
 # Usage:
 #
@@ -42,6 +42,10 @@ if sys.version_info >= (3, 0):
 else:
   import urllib2
 
+GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
+ANALYTICS = "http://goo.gl/edu1jG"
+VERSION = "0.3.7"
+
 VCGENCMD = None
 VCDBGCMD = None
 GPU_ALLOCATED_R = None
@@ -50,6 +54,199 @@ SUDO = ""
 TMAX = 0.0
 COLOUR = False
 SYSINFO = {}
+
+# [USER:8][NEW:1][MEMSIZE:3][MANUFACTURER:4][PROCESSOR:4][TYPE:8][REV:4]
+# NEW          23: will be 1 for the new scheme, 0 for the old scheme
+# MEMSIZE      20: 0=256M 1=512M 2=1G
+# MANUFACTURER 16: 0=SONY 1=EGOMAN 2=EMBEST 4=EMBEST
+# PROCESSOR    12: 0=2835 1=2836 2=2837
+# TYPE         04: 0=MODELA 1=MODELB 2=MODELA+ 3=MODELB+ 4=Pi2 MODELB 5=ALPHA 6=CM 8=Pi3 9=Pi0
+# REV          00: 0=REV0 1=REV1 2=REV2
+
+#0 Unknown
+#1 pi3rev1.0       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 0<<0   = 0xa02080
+#2 pi3rev1.2       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 2<<0   = 0xa02082
+#3 2837 pi2 rev1.1 = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 1<<0   = 0xa02041
+#4 2836 pi2        = 1<<23 | 2<<20 | 1<<12 | 4<<4 | 1<<0   = 0xa01041
+#5 rev1.1 B+       = 1<<23 | 1<<20 | 0<<12 | 3<<4 | 0xf<<0 = 0x90003f
+#6 pi0             = 1<<23 | 1<<20 | 0<<12 | 9<<4 | 0<<0   = 0x900090
+#Extras:
+#7 pi1rev2.0       = 1<<23 | 1<<20 | 0<<12 | 1<<4 | 2<<0   = 0x900012
+#8 2837 pi2rev1.0  = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 0<<0   = 0xa01040
+
+class RPIHardware():
+  def __init__(self, rev_code = None):
+    self.hardware_raw = {"rev_code": 0, "bits": "", "pcb": 0, "user": 0, "new": 0, "memsize": 0, "manufacturer": 0, "processor": 0, "type": 0, "rev": 0}
+    self.hardware_fmt = {"bits": "", "pcb": "", "new": "", "memsize": "", "manufacturer": "", "processor": "", "type": "", "rev": ""}
+
+    # Note: Some of these memory sizes and processors are fictional and relate to unannounced products - logic would
+    #       dictate such products may exist at some point in the future, but it's only guesswork.
+    self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB"]
+    self.manufacturers = ["Sony", "Egoman", "Embest", "Unknown", "Embest"]
+    self.processors = ["2835", "2836", "2837", "2838", "2839", "2840"]
+    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "", "Pi3", "Pi0", ""]
+    self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 2837 Rev1.0"]
+
+    self.set_rev_code(rev_code)
+#    self.dump()
+
+  # Output a pretty format... based on some guesswork, not exhaustively tested
+  def __str__(self):
+    #[Pi#|CM] <Model X> Rev #.# (SoC #### with ###MB RAM) manufactured by XXXXXXXXXX
+    pretty = []
+    if self.hardware_fmt["type"].startswith("CM"):
+      pretty.append(self.hardware_fmt["type"])
+    elif self.hardware_fmt["type"].startswith("Pi"):
+      pretty.append(self.hardware_fmt["type"])
+    else:
+      pretty.append("Pi1")
+      pretty.append(self.hardware_fmt["type"])
+
+    if self.hardware_raw["pcb"] == 7: #Pi1 B r2.0
+      rev = "2.0"
+    else:
+      rev = "1.%d" % self.hardware_raw["rev"]
+
+    pretty.append("rev %s," % rev)
+    pretty.append("BCM%s SoC with %s RAM" % (self.hardware_fmt["processor"], self.hardware_fmt["memsize"]))
+    pretty.append("by %s" % self.hardware_fmt["manufacturer"])
+    
+    return " ".join(pretty)
+
+  def dump(self):
+    print("%s\n%s" % (self.hardware_raw, self.hardware_fmt))
+
+  def bin(self, s, len = 32):
+    return ("%*s" % (len, self._bin(s))).replace(" ", "0")
+
+  def _bin(self, s):
+    return str(s) if s<=1 else self._bin(s>>1) + str(s&1)
+
+  def getbits(self, bits, lsb, len=1):
+    return (bits & (((2 ** len) - 1) << lsb)) >> lsb
+
+  def readfile(self, infile):
+    if os.path.exists(infile):
+      with open(infile, 'r') as stream:
+        return stream.read()[:-1].split("\n")
+    else:
+      return ""
+
+  def read_rev_code(self):
+    for line in self.readfile("/proc/cpuinfo"):
+      if line.startswith("Revision\t:"):
+        return "0x%s" % line.split(" ")[1]
+    else:
+      return "0x0"
+
+  def set_rev_code(self, rev_code):
+    if rev_code is None:
+      rev_code = int(self.read_rev_code(), 16)
+
+    b = self.bin(rev_code)
+
+    self.hardware_raw["rev_code"] = rev_code
+    self.hardware_raw["bits"] = "%s %s %s %s %s %s %s" % (b[0:8], b[8:9], b[9:12], b[12:16], b[16:20], b[20:28], b[28:32])
+    self.hardware_raw["user"] = self.getbits(rev_code, 24, 8)
+    self.hardware_raw["new"] = self.getbits(rev_code, 23, 1)
+    self.hardware_raw["memsize"] = self.getbits(rev_code, 20, 3)
+    self.hardware_raw["manufacturer"] = self.getbits(rev_code, 16, 4)
+    self.hardware_raw["processor"] = self.getbits(rev_code, 12, 4)
+    self.hardware_raw["type"] = self.getbits(rev_code, 4, 8)
+    self.hardware_raw["rev"] = self.getbits(rev_code, 0, 4)
+
+    #http://elinux.org/RPi_HardwareHistory#Board_Revision_History
+    if self.hardware_raw["type"] == 0:
+      if self.hardware_raw["rev"] in [0, 1, 2, 3]:
+        self.hardware_raw["new"] = 0
+        self.hardware_raw["memsize"] = 0
+        self.hardware_raw["processor"] = 0
+        self.hardware_raw["type"] = 1
+        self.hardware_raw["rev"] = 1
+      elif self.hardware_raw["rev"] in [4, 5, 6]:
+        self.hardware_raw["new"] = 0
+        self.hardware_raw["memsize"] = 0
+        self.hardware_raw["processor"] = 0
+        self.hardware_raw["type"] = 1
+        self.hardware_raw["rev"] = 2
+      elif self.hardware_raw["rev"] in [0xd, 0xe, 0xf]:
+        self.hardware_raw["new"] = 1
+        self.hardware_raw["memsize"] = 1
+        self.hardware_raw["processor"] = 0
+        self.hardware_raw["type"] = 1
+        self.hardware_raw["rev"] = 2
+
+    pcb_base = self.hardware_raw["new"] << 23 | self.hardware_raw["memsize"] << 20 | self.hardware_raw["processor"] << 12 | self.hardware_raw["type"] << 4 | self.hardware_raw["rev"] << 0
+
+    if pcb_base == 0xa02080:
+      pcb = 1
+    elif pcb_base == 0xa02082:
+      pcb = 2
+    elif pcb_base == 0xa02041:
+      pcb = 3
+    elif pcb_base == 0xa01041:
+      pcb = 4
+    elif pcb_base == 0xa01040:
+      pcb = 8
+    elif pcb_base == 0x90003f:
+      pcb = 5
+    elif pcb_base == 0x900090:
+      pcb = 6
+    elif pcb_base == 0x900012:
+      pcb = 7
+    else:
+      pcb = 0
+    self.hardware_raw["pcb"] = pcb
+
+    self.hardware_fmt = {"pcb": "Unknown", "bits": "", "new": "", "memsize": "", "manufacturer": "Unknown", "processor": "Unknown", "type": "Unknown", "rev": ""}
+
+    self.hardware_fmt["bits"] = self.hardware_raw["bits"]
+
+    self.hardware_fmt["new"] = ["No", "Yes"][self.hardware_raw["new"]]
+    self.hardware_fmt["memsize"] = self.memsizes[self.hardware_raw["memsize"]]
+
+    if 0 <= self.hardware_raw["manufacturer"] <= len(self.manufacturers):
+      self.hardware_fmt["manufacturer"] = self.manufacturers[self.hardware_raw["manufacturer"]]
+
+    self.hardware_fmt["processor"] = self.processors[self.hardware_raw["processor"]]
+
+    if 0 <= self.hardware_raw["type"] <= len(self.models):
+      self.hardware_fmt["type"] = self.models[self.hardware_raw["type"]]
+
+    self.hardware_fmt["rev"] = "Rev%d" % self.hardware_raw["rev"]
+
+    if 0 <= self.hardware_raw["pcb"] <= len(self.pcbs):
+      self.hardware_fmt["pcb"] = self.pcbs[self.hardware_raw["pcb"]]
+
+  def GetPiModel(self):
+    if self.hardware_raw["processor"] == 0:
+      return "RPi1"
+    elif self.hardware_raw["processor"] == 1:
+      return "RPi2"
+    elif self.hardware_raw["processor"] == 2:
+      return "RPi3"
+    elif self.hardware_raw["processor"] == 3:
+      return "RPi4"
+    elif self.hardware_raw["processor"] == 4:
+      return "RPi5"
+
+  def GetBoardPCB(self):
+    return self.hardware_fmt["pcb"]
+
+  def GetMemSize(self):
+    return self.hardware_fmt["memsize"]
+
+  def GetManufacturer(self):
+    return self.hardware_fmt["manufacturer"]
+
+  def GetProcessor(self):
+    return self.hardware_fmt["processor"]
+
+  def GetType(self):
+    return self.hardware_fmt["type"]
+
+  def GetRev(self):
+    return self.hardware_fmt["rev"]
 
 # Primitives
 def printn(text):
@@ -282,7 +479,7 @@ def getNetwork(storage, interface):
     dTX = cTX - pTX
     storage[0] = (dTime, [int(dRX/dTime), int(dTX/dTime), dRX, dTX])
 
-def getBCM2835(storage):
+def getBCM283X(storage):
   global TMAX
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
   tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
@@ -434,8 +631,9 @@ def getsysinfo():
 
   sysinfo = {}
 
-  HARDWARE = grep("^Hardware[ \t]*:", readfile("/proc/cpuinfo"), 1) # BCM2708, BCM2709
-  RPI_MODEL = "rpi1" if HARDWARE == "BCM2708" else "rpi2"
+  HARDWARE = RPIHardware()
+
+  RPI_MODEL = HARDWARE.GetPiModel() # RPi1, RPi2, RPi3 etc.
   
   VCG_INT = vcgencmd_items("get_config int", isInt=True)
 
@@ -446,14 +644,18 @@ def getsysinfo():
     CORE_DEFAULT_BUSY += 50
     H264_DEFAULT_BUSY += 50
 
-  if RPI_MODEL == "rpi1":
+  if RPI_MODEL == "RPi1":
     ARM_DEFAULT_IDLE = 700
     SDRAM_DEFAULT = 400
-  else:
+  elif RPI_MODEL == "RPi2":
+    ARM_DEFAULT_IDLE = 600
+    SDRAM_DEFAULT = 450
+  elif RPI_MODEL == "RPi3":
     ARM_DEFAULT_IDLE = 600
     SDRAM_DEFAULT = 450
 
-  sysinfo["hardware"]   = RPI_MODEL
+  sysinfo["hardware"]   = HARDWARE
+  sysinfo["model"]      = RPI_MODEL
   sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
   sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
   sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
@@ -506,7 +708,7 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
 
   SWAP_TOTAL = int(grep("SwapTotal", readfile("/proc/meminfo"), field=1, defaultvalue="0"))
 
-  VCG_INT    = vcgencmd_items("get_config int", isInt=True)
+  VCG_INT    = vcgencmd_items("get_config int", isInt=False)
 
   NPROC      = sysinfo["nproc"]
   ARM_MIN    = sysinfo["arm_min"]
@@ -527,9 +729,10 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
 
   OTHER_VARS = ["temp_limit=%d" % TEMP_LIMIT]
   for item in ["force_turbo", "initial_turbo", "disable_auto_turbo", "avoid_pwm_pll",
-               "hdmi_force_hotplug", "hdmi_force_edid_audio", "no_hdmi_resample"]:
-    if VCG_INT.get(item, 0) != 0:
-      OTHER_VARS.append("%s=%d" % (item, VCG_INT.get(item, 0)))
+               "hdmi_force_hotplug", "hdmi_force_edid_audio", "no_hdmi_resample",
+               "disable_pvt", "sdram_schmoo"]:
+    if item in VCG_INT:
+      OTHER_VARS.append("%s=%s" % (item, VCG_INT[item]))
 
   CODECS = []
   for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG", "DTS", "DDP"]:
@@ -541,9 +744,8 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
 
   SWAP_MEM = "" if SWAP_TOTAL == 0 else " plus %dMB Swap" % int(ceildiv(SWAP_TOTAL, 1024))
   ARM_ARCH = grep("^model name", readfile("/proc/cpuinfo"), field=2, head=1)[0:5]
-
   print("  Config: v%s, args \"%s\", priority %s (%s)" % (VERSION, " ".join(args), priority_desc, nv))
-  print("     CPU: %d x %s core%s available, using %s governor" % (NPROC, ARM_ARCH, "s"[NPROC==1:], GOV))
+  print("   Board: %d x %s core%s available, %s governor (%s)" %  (NPROC, ARM_ARCH, "s"[NPROC==1:], GOV, sysinfo["hardware"]))
   print("  Memory: %sMB (split %sMB ARM, %sMB GPU)%s" % (MEM_MAX, MEM_ARM, MEM_GPU, SWAP_MEM))
   print("HW Block: | %s | %s | %s | %s |" % ("ARM".center(7), "Core".center(6), "H264".center(6), "SDRAM".center(11)))
   print("Min Freq: | %s | %s | %s | %s |" % (MHz(ARM_MIN,4,7), MHz(CORE_MIN,3,6), MHz(0,3,6),        MHz(SDRAM_MAX,3,11)))
@@ -928,10 +1130,6 @@ def main(args):
   global PEAKVALUES
   global VCGENCMD_GET_MEM
 
-  GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
-  ANALYTICS = "http://goo.gl/edu1jG"
-  VERSION = "0.3.6"
-
   INTERFACE = "eth0"
   DELAY = 2
   HDREVERY = 30
@@ -1139,7 +1337,7 @@ def main(args):
   CORE= [(0, None), (0, None), (0, None)]
   DELTAS=[(0, None), (0, None), (0, None)]
 
-  getBCM2835(BCM)
+  getBCM283X(BCM)
   getIRQ(IRQ)
   getNetwork(NET, INTERFACE)
 
@@ -1183,7 +1381,7 @@ def main(args):
       count = 0
     count += 1
 
-    getBCM2835(BCM)
+    getBCM283X(BCM)
     getIRQ(IRQ)
     getNetwork(NET, INTERFACE)
 
