@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.8 (12/03/2016)
+* Add: Option `T` to disable 85C temperature limit - useful when stress testing
+
 ##Version 0.3.7 (29/02/2016)
 * Add: Decode hardware revision
 * Add: Pi3 support

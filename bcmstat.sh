@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.3.7"
+VERSION = "0.3.8"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -52,6 +52,7 @@ GPU_ALLOCATED_R = None
 GPU_ALLOCATED_M = None
 SUDO = ""
 TMAX = 0.0
+LIMIT_TEMP = True
 COLOUR = False
 SYSINFO = {}
 
@@ -480,11 +481,14 @@ def getNetwork(storage, interface):
     storage[0] = (dTime, [int(dRX/dTime), int(dTX/dTime), dRX, dTX])
 
 def getBCM283X(storage):
-  global TMAX
+  global TMAX, LIMIT_TEMP
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
   tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
   tCore = 0 if tCore < 0 else tCore
-  TMAX  = tCore if (tCore > TMAX and tCore < 85000) else TMAX
+  if LIMIT_TEMP:
+    TMAX  = tCore if (tCore > TMAX and tCore < 85000) else TMAX
+  else:
+    TMAX  = tCore if tCore > TMAX else TMAX
 
   storage[2] = storage[1]
   storage[1] = (time.time(),
@@ -834,13 +838,16 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   (core_min, core_max) = limits["core"]
   (h264_min, h264_max) = limits["h264"]
 
+  fTC = "%5.2fC" if bcm2385[3] < 100000 else "%5.1fC"
+  fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
+
   LINE = "%s %s %s %s %s (%s) %s %s %s" % \
            (TIME,
             colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
             colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
             colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
-            colourise(bcm2385[3]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
-            colourise(bcm2385[4]/1000,    "%5.2fC",    50.0,     70.0,     80.0, False),
+            colourise(bcm2385[3]/1000,    fTC,         50.0,     70.0,     80.0, False),
+            colourise(bcm2385[4]/1000,    fTM,         50.0,     70.0,     80.0, False),
             colourise(irq[0],             "%6s",        500,     2500,     5000, True),
             colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
             colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
@@ -936,7 +943,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -954,6 +961,7 @@ def ShowHelp():
   print("q/Q      Do (q)/don't (Q) suppress configuraton information")
   print("D        Show delta memory - negative: memory allocated, positive: memory freed")
   print("A        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
+  print("T        Maximum temperature is normally capped at 85C - use this option to disable temperature cap")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
@@ -1125,7 +1133,7 @@ def autoUpdate(args):
     os.execl(sys.executable, sys.executable, *argv)
 
 def main(args):
-  global COLOUR, SUDO
+  global COLOUR, SUDO, LIMIT_TEMP
   global GITHUB, ANALYTICS, VERSION
   global PEAKVALUES
   global VCGENCMD_GET_MEM
@@ -1243,6 +1251,9 @@ def main(args):
       STATS_CPU_CORE = True
     elif a1 == "P":
       STATS_CPU_CORE = False
+
+    elif a1 == "T":
+      LIMIT_TEMP = False
 
     elif a1 == "D":
       STATS_DELTAS = True
