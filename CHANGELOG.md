@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.3.9 (17/05/2016)
+* Chg: Small bump to support Pi Zero Rev 1.2 and 1.3.
+
 ##Version 0.3.8 (12/03/2016)
 * Add: Option `T` to disable 85C temperature limit - useful when stress testing
 

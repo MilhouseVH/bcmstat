@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.3.8"
+VERSION = "0.3.9"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -191,7 +191,7 @@ class RPIHardware():
       pcb = 8
     elif pcb_base == 0x90003f:
       pcb = 5
-    elif pcb_base == 0x900090:
+    elif (pcb_base & 0xfffff0) == 0x900090:
       pcb = 6
     elif pcb_base == 0x900012:
       pcb = 7
