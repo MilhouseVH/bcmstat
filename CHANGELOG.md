@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.0 (13/06/2016)
+* Add: Add `y`/`Y` to control display of under-voltage(U)/freq capped(F)/throttle(T) flags
+
 ##Version 0.3.9 (17/05/2016)
 * Chg: Small bump to support Pi Zero Rev 1.2 and 1.3.
 

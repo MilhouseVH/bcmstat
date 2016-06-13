@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.3.9"
+VERSION = "0.4.0"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -248,6 +248,15 @@ class RPIHardware():
 
   def GetRev(self):
     return self.hardware_fmt["rev"]
+
+  # https://www.raspberrypi.org/forums/viewtopic.php?f=63&t=147781&start=50#p972790
+  def GetThresholdValues(self):
+    value = int(vcgencmd("get_throttled"), 16)
+    threshold = {}
+    threshold["under-voltage"] = (self.getbits(value, 0, 1), self.getbits(value, 18, 1))
+    threshold["arm-capped"] = (self.getbits(value, 1, 1), self.getbits(value, 17, 1))
+    threshold["throttled"] = (self.getbits(value, 2, 1), self.getbits(value, 16, 1))
+    return threshold
 
 # Primitives
 def printn(text):
@@ -631,11 +640,9 @@ def MaxSDRAMVolts():
 def MaxSDRAMOffset():
   return (int(MaxSDRAMVolts()[:-1].replace(".", "")) - 12000 + 50) / 250
 
-def getsysinfo():
+def getsysinfo(HARDWARE):
 
   sysinfo = {}
-
-  HARDWARE = RPIHardware()
 
   RPI_MODEL = HARDWARE.GetPiModel() # RPi1, RPi2, RPi3 etc.
   
@@ -787,8 +794,15 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   printn("  Booted: %s" % BOOTED)
 
 def ShowHeadings(display_flags, sysinfo):
-  HDR1 = "Time         ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s"
-  HDR2 = "======== ======= ======= ======= =============== ====== ========== =========="
+  HDR1 = "Time    "
+  HDR2 = "========"
+
+  if display_flags["threshold"]:
+    HDR1 = "%s UFT" % HDR1
+    HDR2 = "%s ===" % HDR2
+
+  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s" % HDR1
+  HDR2 = "%s ======= ======= ======= =============== ====== ========== ==========" % HDR2
 
   if display_flags["utilisation"]:
     HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
@@ -827,11 +841,48 @@ def ShowHeadings(display_flags, sysinfo):
 
   printn("%s\n%s" % (HDR1, HDR2))
 
-def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
+def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
   global ARM_MIN, ARM_MAX
 
   now = datetime.datetime.now()
   TIME = "%02d:%02d:%02d" % (now.hour, now.minute, now.second)
+
+  LINE = "%s" % TIME
+
+  if display_flags["threshold"]:
+    (volts_now, volts_hist) = threshold["under-voltage"]
+    (freq_now, freq_hist)   = threshold["arm-capped"]
+    (throt_now, throt_hist) = threshold["throttled"]
+
+    dVolts = dFreq = dThrottled = " "
+    nVolts = nFreq = nThrottled = 0
+
+    if volts_now == 1:
+      dVolts = "U"
+      nVolts = 3
+    elif volts_hist == 1:
+      dVolts = "u"
+      nVolts = 2
+
+    if freq_now == 1:
+      dFreq = "F"
+      nFreq = 3
+    elif freq_hist == 1:
+      dFreq = "f"
+      nFreq = 2
+
+    if throt_now == 1:
+      dThrottled = "T"
+      nThrottled = 3
+    elif throt_hist == 1: 
+      dThrottled = "t"
+      nThrottled = 2
+      
+    LINE = "%s %s%s%s" % \
+             (LINE,
+              colourise(dVolts,     "%s", 1, 2, 3, False, compare=nVolts),
+              colourise(dFreq,      "%s", 1, 2, 3, False, compare=nFreq),
+              colourise(dThrottled, "%s", 1, 2, 3, False, compare=nThrottled))
 
   limits = sysinfo["limits"]
   (arm_min, arm_max) = limits["arm"]
@@ -842,7 +893,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
 
   LINE = "%s %s %s %s %s (%s) %s %s %s" % \
-           (TIME,
+           (LINE,
             colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
             colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
             colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
@@ -943,7 +994,7 @@ def ShowStats(display_flags, sysinfo, bcm2385, irq, network, cpuload, memory, gp
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [x|X] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [y|Y] [x|X] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -953,6 +1004,7 @@ def ShowHelp():
   print("L        Run at lowest priority (nice +20) - default")
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
+  print("y/Y      Do (y)/don't (Y) show threshold event flags (U=under-voltage, F=ARM freq capped, T=currently throttled, lowercase if event has occurred in the past")
   print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
   print("p/P      Do (p)/don't (P) monitor individual core load stats (when core count > 1)")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
@@ -1138,6 +1190,8 @@ def main(args):
   global PEAKVALUES
   global VCGENCMD_GET_MEM
 
+  HARDWARE = RPIHardware()
+
   INTERFACE = "eth0"
   DELAY = 2
   HDREVERY = 30
@@ -1147,6 +1201,7 @@ def main(args):
   NICE_ADJUST = +20
   INCLUDE_SWAP = True
 
+  STATS_THRESHOLD = False
   STATS_CPU_MEM = False
   STATS_UTILISATION = False
   STATS_CPU_CORE= False
@@ -1240,6 +1295,11 @@ def main(args):
     elif a1 == "F":
       STATS_GPU_M = False
 
+    elif a1 == "y":
+      STATS_THRESHOLD = True
+    elif a1 == "Y":
+      STATS_THRESHOLD = False
+
     elif a1 == "x":
       STATS_CPU_MEM = True
       STATS_UTILISATION = True
@@ -1323,7 +1383,7 @@ def main(args):
     NICE_V = os.nice(0)
 
   # Collect basic system configuration
-  sysinfo = getsysinfo()
+  sysinfo = getsysinfo(HARDWARE)
   STATS_CPU_CORE = False if sysinfo["nproc"] < 2 else STATS_CPU_CORE
 
   if not QUIET:
@@ -1347,6 +1407,8 @@ def main(args):
   GPU = [(0, None), (0, None), (0, None)]
   CORE= [(0, None), (0, None), (0, None)]
   DELTAS=[(0, None), (0, None), (0, None)]
+
+  UFT = None
 
   getBCM283X(BCM)
   getIRQ(IRQ)
@@ -1375,7 +1437,8 @@ def main(args):
   count = HDREVERY
   firsthdr = True
 
-  display_flags = {"cpu_mem":     STATS_CPU_MEM,
+  display_flags = {"threshold":   STATS_THRESHOLD,
+                   "cpu_mem":     STATS_CPU_MEM,
                    "utilisation": STATS_UTILISATION,
                    "cpu_cores":   STATS_CPU_CORE,
                    "gpu_reloc":   STATS_GPU_R,
@@ -1391,6 +1454,9 @@ def main(args):
       firsthdr = False
       count = 0
     count += 1
+
+    if STATS_THRESHOLD:
+      UFT = HARDWARE.GetThresholdValues()
 
     getBCM283X(BCM)
     getIRQ(IRQ)
@@ -1414,7 +1480,7 @@ def main(args):
     if STATS_DELTAS or STATS_ACCUMULATED:
       getMemDeltas(DELTAS, MEM, GPU)
 
-    ShowStats(display_flags, sysinfo, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
+    ShowStats(display_flags, sysinfo, UFT, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
 
     #Store peak values
     if PEAKVALUES is None:
