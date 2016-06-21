@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -250,13 +250,40 @@ class RPIHardware():
     return self.hardware_fmt["rev"]
 
   # https://www.raspberrypi.org/forums/viewtopic.php?f=63&t=147781&start=50#p972790
-  def GetThresholdValues(self):
-    value = int(vcgencmd("get_throttled"), 16)
-    threshold = {}
-    threshold["under-voltage"] = (self.getbits(value, 0, 1), self.getbits(value, 18, 1))
-    threshold["arm-capped"] = (self.getbits(value, 1, 1), self.getbits(value, 17, 1))
-    threshold["throttled"] = (self.getbits(value, 2, 1), self.getbits(value, 16, 1))
-    return threshold
+  def GetThresholdValues(self, storage, withclear):
+    keys = ["under-voltage", "arm-capped", "throttled"]
+
+    # If withclear is supported, clear persistent bits after querying (value is "since last query")
+    # The alternative value is "since boot". Always use "since boot" on first query.
+    if withclear and storage[1][0] != 0:
+      value = int(vcgencmd("get_throttled 0x7"), 16)
+    else:
+      value = int(vcgencmd("get_throttled"), 16)
+
+    storage[2] = storage[1]
+    storage[1] = (time.time(), {keys[0]: (self.getbits(value, 0, 1), self.getbits(value, 18, 1)),
+                                keys[1]: (self.getbits(value, 1, 1), self.getbits(value, 17, 1)),
+                                keys[2]: (self.getbits(value, 2, 1), self.getbits(value, 16, 1))})
+
+    if storage[2][0] != 0:
+      s0 = storage[0]
+      s1 = storage[1]
+      s2 = storage[2]
+      dTime = s1[0] - s2[0]
+      dTime = 1 if dTime <= 0 else dTime
+      threshold = {}
+      for k in keys:
+        now = s1[1][k][0]
+        occ = s1[1][k][1]
+        prev = s0[1][k][1] if s0[0] != 0 else 0
+        prev |= s2[1][k][1]
+        # If an event isn't currently active but an event has occurred since the last query
+        # then report it as active since the previous query
+        if withclear and now == 0 and occ == 1:
+          now = 1
+        # Persist occurred status across queries
+        threshold[k] = (now, occ | prev)
+      storage[0] = (dTime, threshold)
 
 # Primitives
 def printn(text):
@@ -1113,12 +1140,18 @@ def get_latest_version():
   else:
     etc_issue = readfile("/etc/issue")
     if etc_issue:
+      if grep("libreelec", etc_issue, head=1, case_sensitive=False):
+        DIST = "LibreELEC"
+      elif grep("openelec", etc_issue, head=1, case_sensitive=False):
+        DIST = "OpenELEC"
       if grep("raspbian", etc_issue, head=1, case_sensitive=False):
         DIST = "Raspbian"
       elif grep("raspbmc", etc_issue, head=1, case_sensitive=False):
         DIST = "Raspbmc"
       elif grep("xbian", etc_issue, head=1, case_sensitive=False):
         DIST = "XBian"
+      elif grep("osmc", etc_issue, head=1, case_sensitive=False):
+        DIST = "OSMC"
 
   # Need user agent etc. for analytics
   user_agent = "Mozilla/5.0 (%s; %s_%s; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
@@ -1202,6 +1235,7 @@ def main(args):
   INCLUDE_SWAP = True
 
   STATS_THRESHOLD = False
+  STATS_THRESHOLD_CLEAR = False
   STATS_CPU_MEM = False
   STATS_UTILISATION = False
   STATS_CPU_CORE= False
@@ -1382,6 +1416,16 @@ def main(args):
     runcommand("%srenice -n %d -p %d" % (SUDO, NICE_ADJUST, os.getpid()))
     NICE_V = os.nice(0)
 
+  commands = vcgencmd("commands")[1:-1].split(", ")
+
+  if STATS_THRESHOLD:
+    if "get_throttled" in commands:
+      if vcgencmd("get_throttled 0x0").find("error_msg") == -1:
+        STATS_THRESHOLD_CLEAR = True
+    else:
+      print("WARNING: Threshold query not supported by current firmware - option will be disabled")
+      STATS_THRESHOLD = False
+
   # Collect basic system configuration
   sysinfo = getsysinfo(HARDWARE)
   STATS_CPU_CORE = False if sysinfo["nproc"] < 2 else STATS_CPU_CORE
@@ -1406,9 +1450,11 @@ def main(args):
   MEM = [(0, None), (0, None), (0, None)]
   GPU = [(0, None), (0, None), (0, None)]
   CORE= [(0, None), (0, None), (0, None)]
+  UFT = [(0, None), (0, None), (0, None)]
   DELTAS=[(0, None), (0, None), (0, None)]
 
-  UFT = None
+  if STATS_THRESHOLD:
+    HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
   getBCM283X(BCM)
   getIRQ(IRQ)
@@ -1447,6 +1493,11 @@ def main(args):
                    "deltas":      STATS_DELTAS,
                    "accumulated": STATS_ACCUMULATED}
 
+  #Store peak values
+  PEAKVALUES = {"01#IRQ":0, "02#RX":0, "03#TX":0}
+  if STATS_THRESHOLD:
+    PEAKVALUES.update({"04#UVOLT":0, "05#FCAPPED":0, "06#THROTTLE":0})
+
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
@@ -1456,7 +1507,7 @@ def main(args):
     count += 1
 
     if STATS_THRESHOLD:
-      UFT = HARDWARE.GetThresholdValues()
+      HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
     getBCM283X(BCM)
     getIRQ(IRQ)
@@ -1480,15 +1531,18 @@ def main(args):
     if STATS_DELTAS or STATS_ACCUMULATED:
       getMemDeltas(DELTAS, MEM, GPU)
 
-    ShowStats(display_flags, sysinfo, UFT, BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
+    ShowStats(display_flags, sysinfo, UFT[0][1], BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
 
-    #Store peak values
-    if PEAKVALUES is None:
-      PEAKVALUES = {"IRQ":0, "RX":0, "TX":0}
     n = {}
-    n["IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["IRQ"] else PEAKVALUES["IRQ"]
-    n["RX"]  = NET[0][1][0] if NET[0][1][0] > PEAKVALUES["RX"] else PEAKVALUES["RX"]
-    n["TX"]  = NET[0][1][1] if NET[0][1][1] > PEAKVALUES["TX"] else PEAKVALUES["TX"]
+    n["01#IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["01#IRQ"] else PEAKVALUES["01#IRQ"]
+    n["02#RX"]  = NET[0][1][0] if NET[0][1][0] > PEAKVALUES["02#RX"] else PEAKVALUES["02#RX"]
+    n["03#TX"]  = NET[0][1][1] if NET[0][1][1] > PEAKVALUES["03#TX"] else PEAKVALUES["03#TX"]
+
+    if STATS_THRESHOLD:
+      n["04#UVOLT"]    = PEAKVALUES["04#UVOLT"] + UFT[0][1]["under-voltage"][0]
+      n["05#FCAPPED"]  = PEAKVALUES["05#FCAPPED"] + UFT[0][1]["arm-capped"][0]
+      n["06#THROTTLE"] = PEAKVALUES["06#THROTTLE"] + UFT[0][1]["throttled"][0]
+
     PEAKVALUES = n
 
     time.sleep(DELAY)
@@ -1501,6 +1555,6 @@ if __name__ == "__main__":
     print()
     if PEAKVALUES:
       line = ""
-      for item in PEAKVALUES: line = "%s%s%s: %s" % (line, (", " if line else ""), item, PEAKVALUES[item])
+      for item in sorted(PEAKVALUES): line = "%s%s%s: %s" % (line, (", " if line else ""), item[3:], PEAKVALUES[item])
       print("Peak Values: %s" % line)
     if type(e) == SystemExit: sys.exit(int(str(e)))
