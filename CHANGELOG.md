@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.2 (14/08/2016)
+* Fix: Read correct bits when logging past under-voltage/throttle events.
+
 ##Version 0.4.1 (21/06/2016)
 * Chg: If using recent firmware (>2016-06-20), threshold events that occur during sleep intervals will now be detected and reported
 * Add: If enabled (`-y`), report peak number of undervolt, frequency cap and throttle events

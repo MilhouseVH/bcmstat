@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -261,9 +261,9 @@ class RPIHardware():
       value = int(vcgencmd("get_throttled"), 16)
 
     storage[2] = storage[1]
-    storage[1] = (time.time(), {keys[0]: (self.getbits(value, 0, 1), self.getbits(value, 18, 1)),
+    storage[1] = (time.time(), {keys[0]: (self.getbits(value, 0, 1), self.getbits(value, 16, 1)),
                                 keys[1]: (self.getbits(value, 1, 1), self.getbits(value, 17, 1)),
-                                keys[2]: (self.getbits(value, 2, 1), self.getbits(value, 16, 1))})
+                                keys[2]: (self.getbits(value, 2, 1), self.getbits(value, 18, 1))})
 
     if storage[2][0] != 0:
       s0 = storage[0]
