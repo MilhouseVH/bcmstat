@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -354,12 +354,12 @@ def vcdbg(args):
   global VCDBGCMD, SUDO
   return runcommand("%s%s %s" % (SUDO, VCDBGCMD, args))
 
-def readfile(infile):
+def readfile(infile, defaultval=""):
   if os.path.exists(infile):
     with open(infile, 'r') as stream:
         return stream.read()[:-1]
   else:
-    return ""
+    return defaultval
 
 def grep(match_string, input_string, field=None, head=None, tail=None, split_char=" ", case_sensitive=True, defaultvalue=None):
 
@@ -528,9 +528,9 @@ def getBCM283X(storage):
 
   storage[2] = storage[1]
   storage[1] = (time.time(),
-                [int(vcgencmd("measure_clock arm")),
-                 int(vcgencmd("measure_clock core")),
-                 int(vcgencmd("measure_clock h264")),
+                [int(vcgencmd("measure_clock arm")) + 500000,
+                 int(vcgencmd("measure_clock core")) + 500000,
+                 int(vcgencmd("measure_clock h264")) + 500000,
                  tCore,
                  TMAX])
 
@@ -695,8 +695,16 @@ def getsysinfo(HARDWARE):
   sysinfo["hardware"]   = HARDWARE
   sysinfo["model"]      = RPI_MODEL
   sysinfo["nproc"]      = len(grep("^processor", readfile("/proc/cpuinfo")).split("\n"))
-  sysinfo["arm_min"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
-  sysinfo["arm_max"]    = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
+
+  # Kernel 4.8+ doesn't create cpufreq sysfs when force_turbo=1, in which case
+  # min/max frequencies will both be the same as current
+  if os.path.exists("/sys/devices/system/cpu/cpu0/cpufreq"):
+    sysinfo["arm_min"] = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"))/1000)
+    sysinfo["arm_max"] = int(int(readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"))/1000)
+  else:
+    sysinfo["arm_min"] = int((int(vcgencmd("measure_clock arm")) + 500000) / 1e6)
+    sysinfo["arm_max"] = sysinfo["arm_min"]
+
   sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", CORE_DEFAULT_BUSY))
   sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", SDRAM_DEFAULT)
@@ -762,7 +770,8 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   vCore      = vcgencmd("measure_volts core")
   vRAM       = MaxSDRAMVolts()
 
-  GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+  GOV        = readfile("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor", "undefined")
+
   FIRMWARE   = ", ".join(grepv("Copyright", vcgencmd("version", split=False)).replace(", ","").split("\n")).replace(" ,",",")
 
   OTHER_VARS = ["temp_limit=%d" % TEMP_LIMIT]
@@ -773,7 +782,7 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
       OTHER_VARS.append("%s=%s" % (item, VCG_INT[item]))
 
   CODECS = []
-  for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG", "DTS", "DDP"]:
+  for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG"]:
     if vcgencmd("codec_enabled %s" % codec) == "enabled":
       CODECS.append(codec)
   CODECS = CODECS if CODECS else ["none"]
