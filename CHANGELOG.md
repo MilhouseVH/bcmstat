@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.4 (17/01/2017)
+* Chg: Add additional codecs
+
 ##Version 0.4.3 (05/10/2016)
 * Fix: Allow for missing CPUFreq interface with kernel 4.8+ when `force_turbo=1`
 * Chg: Add rounding to `measure_clock` to account for jitter
