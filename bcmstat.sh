@@ -782,7 +782,7 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
       OTHER_VARS.append("%s=%s" % (item, VCG_INT[item]))
 
   CODECS = []
-  for codec in ["H264", "WVC1", "MPG2", "VP8", "VORBIS", "MJPG"]:
+  for codec in ["H264", "H263", "WVC1", "MPG4", "MPG2", "VP8", "VP6", "VORB", "THRA", "MJPG", "FLAC", "PCM"]:
     if vcgencmd("codec_enabled %s" % codec) == "enabled":
       CODECS.append(codec)
   CODECS = CODECS if CODECS else ["none"]
