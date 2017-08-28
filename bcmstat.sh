@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -444,6 +444,15 @@ def minmax(min, max, value):
   else:
     return value
 
+def getDefaultInterface():
+  interfaces = grep("^[ ]*.*:", readfile("/proc/net/dev"))
+  for interface in [i for i in interfaces.split("\n")]:
+    name = interface.split(":")[0]
+    if name.startswith("eth") or name.startswith("enxb827eb"):
+      return name
+
+  return "wlan0"
+
 # Collect processor stats once per loop, so that consistent stats are
 # used when calculating total system load and individual core loads
 def getProcStats(storage):
@@ -837,8 +846,13 @@ def ShowHeadings(display_flags, sysinfo):
     HDR1 = "%s UFT" % HDR1
     HDR2 = "%s ===" % HDR2
 
-  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s" % HDR1
-  HDR2 = "%s ======= ======= ======= =============== ====== ========== ==========" % HDR2
+  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)  IRQ/s" % HDR1
+  HDR2 = "%s ======= ======= ======= =============== ======" % HDR2
+
+  if display_flags["network"]:
+    HDR1 = "%s     RX B/s     TX B/s" % HDR1
+    HDR2 = "%s ========== ==========" % HDR2
+
 
   if display_flags["utilisation"]:
     HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
@@ -928,16 +942,20 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
   fTC = "%5.2fC" if bcm2385[3] < 100000 else "%5.1fC"
   fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
 
-  LINE = "%s %s %s %s %s (%s) %s %s %s" % \
+  LINE = "%s %s %s %s %s (%s) %s" % \
            (LINE,
             colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
             colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
             colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
             colourise(bcm2385[3]/1000,    fTC,         50.0,     70.0,     80.0, False),
             colourise(bcm2385[4]/1000,    fTM,         50.0,     70.0,     80.0, False),
-            colourise(irq[0],             "%6s",        500,     2500,     5000, True),
-            colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
-            colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
+            colourise(irq[0],             "%6s",        500,     2500,     5000, True))
+
+  if display_flags["network"]:
+    LINE = "%s %s %s" % \
+             (LINE,
+              colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
+              colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
 
   if display_flags["utilisation"]:
     LINE = "%s %s %s %s %s %s %s %s %s" % \
@@ -1036,7 +1054,7 @@ def ShowHelp():
   print("m        Monochrome output (no colourise)")
   print("d #      Specify interval (in seconds) between each iteration - default is 2")
   print("H #      Header every n iterations (0 = no header, default is 30)")
-  print("i iface  Monitor network interface other than the default eth0, eg. br1")
+  print("i iface  Monitor network interface other than the default eth0/enx<MAC> or wlan0, eg. br1")
   print("L        Run at lowest priority (nice +20) - default")
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
@@ -1234,7 +1252,8 @@ def main(args):
 
   HARDWARE = RPIHardware()
 
-  INTERFACE = "eth0"
+  INTERFACE = getDefaultInterface()
+
   DELAY = 2
   HDREVERY = 30
 
@@ -1469,9 +1488,7 @@ def main(args):
   getIRQ(IRQ)
   getNetwork(NET, INTERFACE)
 
-  if not NET[1][1]:
-    printerr("\n\nError: Network interface %s is not valid!" % INTERFACE, newLine=False)
-    sys.exit(2)
+  STATS_NETWORK = (NET[1][1] != "")
 
   if STATS_DELTAS or STATS_ACCUMULATED:
     STATS_CPU_MEM = True
@@ -1493,6 +1510,7 @@ def main(args):
   firsthdr = True
 
   display_flags = {"threshold":   STATS_THRESHOLD,
+                   "network":     STATS_NETWORK,
                    "cpu_mem":     STATS_CPU_MEM,
                    "utilisation": STATS_UTILISATION,
                    "cpu_cores":   STATS_CPU_CORE,
@@ -1520,7 +1538,9 @@ def main(args):
 
     getBCM283X(BCM)
     getIRQ(IRQ)
-    getNetwork(NET, INTERFACE)
+
+    if NET[1][1]:
+      getNetwork(NET, INTERFACE)
 
     if STATS_CPU_CORE or STATS_UTILISATION:
       getProcStats(PROC)
@@ -1544,8 +1564,10 @@ def main(args):
 
     n = {}
     n["01#IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["01#IRQ"] else PEAKVALUES["01#IRQ"]
-    n["02#RX"]  = NET[0][1][0] if NET[0][1][0] > PEAKVALUES["02#RX"] else PEAKVALUES["02#RX"]
-    n["03#TX"]  = NET[0][1][1] if NET[0][1][1] > PEAKVALUES["03#TX"] else PEAKVALUES["03#TX"]
+
+    if STATS_NETWORK:
+      n["02#RX"]  = NET[0][1][0] if NET[0][1][0] > PEAKVALUES["02#RX"] else PEAKVALUES["02#RX"]
+      n["03#TX"]  = NET[0][1][1] if NET[0][1][1] > PEAKVALUES["03#TX"] else PEAKVALUES["03#TX"]
 
     if STATS_THRESHOLD:
       n["04#UVOLT"]    = PEAKVALUES["04#UVOLT"] + UFT[0][1]["under-voltage"][0]

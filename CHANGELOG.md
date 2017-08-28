@@ -1,5 +1,11 @@
 #Changelog
 
+##Version 0.4.5 (28/08/2017)
+* Chg: Ignore invalid network interface and don't output network stats
+* Fix: Support Predictable Network Interface Names in Stretch (ie. `enx<MAC>` instead of `eth0`)
+* Add: If not eth0/enx interface, default to wlan0 (should work better with Pi0W)
+* Closes #7
+
 ##Version 0.4.4 (17/01/2017)
 * Chg: Add additional codecs
 
