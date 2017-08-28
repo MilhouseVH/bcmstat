@@ -1,5 +1,8 @@
 #Changelog
 
+##Version 0.4.6 (28/08/2017)
+* Fix: Crap...
+
 ##Version 0.4.5 (28/08/2017)
 * Chg: Ignore invalid network interface and don't output network stats
 * Fix: Support Predictable Network Interface Names in Stretch (ie. `enx<MAC>` instead of `eth0`)

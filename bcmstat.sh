@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -1539,7 +1539,7 @@ def main(args):
     getBCM283X(BCM)
     getIRQ(IRQ)
 
-    if NET[1][1]:
+    if STATS_NETWORK:
       getNetwork(NET, INTERFACE)
 
     if STATS_CPU_CORE or STATS_UTILISATION:
