@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.6"
+VERSION = "0.4.7"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -59,21 +59,23 @@ SYSINFO = {}
 # [USER:8][NEW:1][MEMSIZE:3][MANUFACTURER:4][PROCESSOR:4][TYPE:8][REV:4]
 # NEW          23: will be 1 for the new scheme, 0 for the old scheme
 # MEMSIZE      20: 0=256M 1=512M 2=1G
-# MANUFACTURER 16: 0=SONY 1=EGOMAN 2=EMBEST 4=EMBEST
+# MANUFACTURER 16: 0=SONY 1=EGOMAN 2=EMBEST 3=SONY JAPAN 4=EMBEST
 # PROCESSOR    12: 0=2835 1=2836 2=2837
-# TYPE         04: 0=MODELA 1=MODELB 2=MODELA+ 3=MODELB+ 4=Pi2 MODELB 5=ALPHA 6=CM 8=Pi3 9=Pi0
-# REV          00: 0=REV0 1=REV1 2=REV2
+# TYPE         04: 0=MODELA 1=MODELB 2=MODELA+ 3=MODELB+ 4=Pi2 MODELB 5=ALPHA 6=CM 8=Pi3 9=Pi0 10=CM3 12=Pi0W
+# REV          00: 0=REV0 1=REV1 2=REV2 3=REV3
 
-#0 Unknown
-#1 pi3rev1.0       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 0<<0   = 0xa02080
-#2 pi3rev1.2       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 2<<0   = 0xa02082
-#3 2837 pi2 rev1.1 = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 1<<0   = 0xa02041
-#4 2836 pi2        = 1<<23 | 2<<20 | 1<<12 | 4<<4 | 1<<0   = 0xa01041
-#5 rev1.1 B+       = 1<<23 | 1<<20 | 0<<12 | 3<<4 | 0xf<<0 = 0x90003f
-#6 pi0             = 1<<23 | 1<<20 | 0<<12 | 9<<4 | 0<<0   = 0x900090
+#0  Unknown
+#1  pi3rev1.0       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 0<<0   = 0xa02080
+#2  pi3rev1.2       = 1<<23 | 2<<20 | 2<<12 | 8<<4 | 2<<0   = 0xa02082
+#3  2837 pi2 rev1.1 = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 1<<0   = 0xa02041
+#4  2836 pi2        = 1<<23 | 2<<20 | 1<<12 | 4<<4 | 1<<0   = 0xa01041
+#5  rev1.1 B+       = 1<<23 | 1<<20 | 0<<12 | 3<<4 | 0xf<<0 = 0x90003f
+#6  pi0             = 1<<23 | 1<<20 | 0<<12 | 9<<4 | 0<<0   = 0x900090
 #Extras:
-#7 pi1rev2.0       = 1<<23 | 1<<20 | 0<<12 | 1<<4 | 2<<0   = 0x900012
-#8 2837 pi2rev1.0  = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 0<<0   = 0xa01040
+#7  pi1rev2.0       = 1<<23 | 1<<20 | 0<<12 | 1<<4 | 2<<0   = 0x900012
+#8  2837 pi2rev1.0  = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 0<<0   = 0xa01040
+#9  pi0 W           = 1<<23 | 1<<20 | 0<<12 | 9<<4 | 0<<0   = 0x9000c0
+#10 2837 pi2rev1.2  = 1<<23 | 2<<20 | 2<<12 | 4<<4 | 0<<0   = 0xa02042
 
 class RPIHardware():
   def __init__(self, rev_code = None):
@@ -83,10 +85,10 @@ class RPIHardware():
     # Note: Some of these memory sizes and processors are fictional and relate to unannounced products - logic would
     #       dictate such products may exist at some point in the future, but it's only guesswork.
     self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB"]
-    self.manufacturers = ["Sony", "Egoman", "Embest", "Unknown", "Embest"]
+    self.manufacturers = ["Sony", "Egoman", "Embest", "Sony Japan", "Embest"]
     self.processors = ["2835", "2836", "2837", "2838", "2839", "2840"]
-    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "", "Pi3", "Pi0", ""]
-    self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 2837 Rev1.0"]
+    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W"]
+    self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 (2837) Rev1.0", "Pi0 W", "Pi2 (2837) Rev1.2"]
 
     self.set_rev_code(rev_code)
 #    self.dump()
@@ -195,6 +197,12 @@ class RPIHardware():
       pcb = 6
     elif pcb_base == 0x900012:
       pcb = 7
+    elif (pcb_base & 0xfffff0) == 0x9000c0:
+      pcb = 9
+    elif (pcb_base & 0xfffff0) in [0xa22080, 0xa32082]:
+      pcb = 3
+    elif pcb_base == 0xa02042:
+      pcb = 10
     else:
       pcb = 0
     self.hardware_raw["pcb"] = pcb
