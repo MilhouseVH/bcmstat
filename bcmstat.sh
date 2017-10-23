@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.7"
+VERSION = "0.4.8"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -214,17 +214,17 @@ class RPIHardware():
     self.hardware_fmt["new"] = ["No", "Yes"][self.hardware_raw["new"]]
     self.hardware_fmt["memsize"] = self.memsizes[self.hardware_raw["memsize"]]
 
-    if 0 <= self.hardware_raw["manufacturer"] <= len(self.manufacturers):
+    if 0 <= self.hardware_raw["manufacturer"] < len(self.manufacturers):
       self.hardware_fmt["manufacturer"] = self.manufacturers[self.hardware_raw["manufacturer"]]
 
     self.hardware_fmt["processor"] = self.processors[self.hardware_raw["processor"]]
 
-    if 0 <= self.hardware_raw["type"] <= len(self.models):
+    if 0 <= self.hardware_raw["type"] < len(self.models):
       self.hardware_fmt["type"] = self.models[self.hardware_raw["type"]]
 
     self.hardware_fmt["rev"] = "Rev%d" % self.hardware_raw["rev"]
 
-    if 0 <= self.hardware_raw["pcb"] <= len(self.pcbs):
+    if 0 <= self.hardware_raw["pcb"] < len(self.pcbs):
       self.hardware_fmt["pcb"] = self.pcbs[self.hardware_raw["pcb"]]
 
   def GetPiModel(self):

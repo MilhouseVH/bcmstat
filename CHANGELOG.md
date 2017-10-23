@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 0.4.8 (23/10/2017)
+* Fix: Range errors
+
 ## Version 0.4.7 (03/10/2017)
 * Add: Support for new models (CM3, Pi0W) and manufacturer (Sony Japan)
 
