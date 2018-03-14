@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.4.9 (14/03/2018)
+* Add: Support for Pi3 Model B+
+* Add: `e` option to display core voltage
+
 ## Version 0.4.8 (23/10/2017)
 * Fix: Range errors
 

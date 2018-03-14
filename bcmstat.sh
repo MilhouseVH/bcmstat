@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.8"
+VERSION = "0.4.9"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -87,8 +87,8 @@ class RPIHardware():
     self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB"]
     self.manufacturers = ["Sony", "Egoman", "Embest", "Sony Japan", "Embest"]
     self.processors = ["2835", "2836", "2837", "2838", "2839", "2840"]
-    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W"]
-    self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 (2837) Rev1.0", "Pi0 W", "Pi2 (2837) Rev1.2"]
+    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W", "Pi3 Model B+"]
+    self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 (2837) Rev1.0", "Pi0 W", "Pi2 (2837) Rev1.2", "Pi3 B+"]
 
     self.set_rev_code(rev_code)
 #    self.dump()
@@ -203,6 +203,8 @@ class RPIHardware():
       pcb = 3
     elif pcb_base == 0xa02042:
       pcb = 10
+    elif pcb_base == 0xa020d0:
+      pcb = 11
     else:
       pcb = 0
     self.hardware_raw["pcb"] = pcb
@@ -533,7 +535,7 @@ def getNetwork(storage, interface):
     dTX = cTX - pTX
     storage[0] = (dTime, [int(dRX/dTime), int(dTX/dTime), dRX, dTX])
 
-def getBCM283X(storage):
+def getBCM283X(storage, STATS_WITH_VOLTS):
   global TMAX, LIMIT_TEMP
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
   tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
@@ -543,13 +545,23 @@ def getBCM283X(storage):
   else:
     TMAX  = tCore if tCore > TMAX else TMAX
 
+  if STATS_WITH_VOLTS:
+    volts = vcgencmd("measure_volts core")
+    if volts and (len(volts) - volts.find(".")) < 5:
+      volts = "%s00" % volts[:-1]
+    else:
+      volts = volts[:-1]
+  else:
+    volts = ""
+
   storage[2] = storage[1]
   storage[1] = (time.time(),
                 [int(vcgencmd("measure_clock arm")) + 500000,
                  int(vcgencmd("measure_clock core")) + 500000,
                  int(vcgencmd("measure_clock h264")) + 500000,
                  tCore,
-                 TMAX])
+                 TMAX,
+                 volts])
 
   if storage[2][0] != 0:
     s1 = storage[1]
@@ -673,7 +685,7 @@ def MHz(value, fwidth, cwidth):
 
 def MaxSDRAMVolts():
   vRAM = "1.2000V"
-  for item in ["sdram_p", "sdram_c", "sdram_ix"]:
+  for item in ["sdram_p", "sdram_c", "sdram_i"]:
     item_v = vcgencmd("measure_volts %s" % item)
     if item_v and (len(item_v) - item_v.find(".")) < 5:
       item_v = "%s00V" % item_v[:-1]
@@ -854,6 +866,10 @@ def ShowHeadings(display_flags, sysinfo):
     HDR1 = "%s UFT" % HDR1
     HDR2 = "%s ===" % HDR2
 
+  if display_flags["core_volts"]:
+    HDR1 = "%s Vcore " % HDR1
+    HDR2 = "%s ======" % HDR2
+
   HDR1 = "%s     ARM    Core    H264 Core Temp (Max)  IRQ/s" % HDR1
   HDR2 = "%s ======= ======= ======= =============== ======" % HDR2
 
@@ -949,6 +965,9 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
 
   fTC = "%5.2fC" if bcm2385[3] < 100000 else "%5.1fC"
   fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
+
+  if display_flags["core_volts"]:
+    LINE = "%s %s" % (LINE, bcm2385[5])
 
   LINE = "%s %s %s %s %s (%s) %s" % \
            (LINE,
@@ -1073,6 +1092,7 @@ def ShowHelp():
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
   print("s/S      Do (s)/don't (S) include any available swap memory when calculating memory statistics")
   print("q/Q      Do (q)/don't (Q) suppress configuraton information")
+  print("e/E      Do (e)/don't (E) show core voltage")
   print("D        Show delta memory - negative: memory allocated, positive: memory freed")
   print("A        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
   print("T        Maximum temperature is normally capped at 85C - use this option to disable temperature cap")
@@ -1272,6 +1292,7 @@ def main(args):
 
   STATS_THRESHOLD = False
   STATS_THRESHOLD_CLEAR = False
+  STATS_WITH_VOLTS = False
   STATS_CPU_MEM = False
   STATS_UTILISATION = False
   STATS_CPU_CORE= False
@@ -1354,6 +1375,11 @@ def main(args):
       NICE_ADJUST = 0
     elif a1 == "M":
       NICE_ADJUST = -20
+
+    elif a1 == "e":
+      STATS_WITH_VOLTS = True
+    elif a1 == "E":
+      STATS_WITH_VOLTS = False
 
     elif a1 == "g":
       STATS_GPU_R = True
@@ -1492,7 +1518,7 @@ def main(args):
   if STATS_THRESHOLD:
     HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
-  getBCM283X(BCM)
+  getBCM283X(BCM, STATS_WITH_VOLTS)
   getIRQ(IRQ)
   getNetwork(NET, INTERFACE)
 
@@ -1520,6 +1546,7 @@ def main(args):
   display_flags = {"threshold":   STATS_THRESHOLD,
                    "network":     STATS_NETWORK,
                    "cpu_mem":     STATS_CPU_MEM,
+                   "core_volts":  STATS_WITH_VOLTS,
                    "utilisation": STATS_UTILISATION,
                    "cpu_cores":   STATS_CPU_CORE,
                    "gpu_reloc":   STATS_GPU_R,
@@ -1544,7 +1571,7 @@ def main(args):
     if STATS_THRESHOLD:
       HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
-    getBCM283X(BCM)
+    getBCM283X(BCM, STATS_WITH_VOLTS)
     getIRQ(IRQ)
 
     if STATS_NETWORK:
