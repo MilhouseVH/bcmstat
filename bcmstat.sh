@@ -437,7 +437,12 @@ def colourise(display, nformat, green, yellow, red, withcomma, compare=None, add
 
 def getIRQ(storage):
   storage[2] = storage[1]
-  storage[1] = (time.time(), int(grep("dwc", readfile("/proc/interrupts"), 1)))
+
+  irq = 0
+  for i in grep("dwc", readfile("/proc/interrupts"), 1).split("\n"):
+    irq += int(i)
+
+  storage[1] = (time.time(), irq)
 
   if storage[2][0] != 0:
     s1 = storage[1]
