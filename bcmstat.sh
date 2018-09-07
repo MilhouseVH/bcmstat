@@ -128,19 +128,31 @@ class RPIHardware():
   def getbits(self, bits, lsb, len=1):
     return (bits & (((2 ** len) - 1) << lsb)) >> lsb
 
-  def readfile(self, infile):
-    if os.path.exists(infile):
-      with open(infile, 'r') as stream:
-        return stream.read()[:-1].split("\n")
+  def readfile(self, infile, isbinary=False):
+    if not isbinary:
+      if os.path.exists(infile):
+        with open(infile, 'r') as stream:
+          return stream.read()[:-1].split("\n")
+      else:
+        return ""
     else:
-      return ""
+      if os.path.exists(infile):
+        with open(infile, 'rb') as stream:
+          return stream.read()
+      else:
+        return [-1]
 
   def read_rev_code(self):
-    for line in self.readfile("/proc/cpuinfo"):
+    for line in self.readfile("/proc/cpuinfo", ""):
       if line.startswith("Revision\t:"):
         return "0x%s" % line.split(" ")[1]
     else:
-      return "0x0"
+      revision = self.readfile("/proc/device-tree/system/linux,revision", isbinary=True)
+      if len(revision) == 4:
+        v = (ord(revision[0]) << 24) + (ord(revision[1]) << 16) + (ord(revision[2]) << 8) + (ord(revision[3]))
+      else:
+        v = 0
+      return '{:08x}'.format(v)
 
   def set_rev_code(self, rev_code):
     if rev_code is None:
