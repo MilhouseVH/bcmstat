@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.4.9"
+VERSION = "0.5.0"
 
 VCGENCMD = None
 VCDBGCMD = None
