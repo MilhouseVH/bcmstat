@@ -85,7 +85,7 @@ class RPIHardware():
     # Note: Some of these memory sizes and processors are fictional and relate to unannounced products - logic would
     #       dictate such products may exist at some point in the future, but it's only guesswork.
     self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB"]
-    self.manufacturers = ["Sony", "Egoman", "Embest", "Sony Japan", "Embest"]
+    self.manufacturers = ["Sony UK", "Egoman", "Embest", "Sony Japan", "Embest", "Stadium"]
     self.processors = ["2835", "2836", "2837", "2838", "2839", "2840"]
     self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W", "Pi3 Model B+"]
     self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 (2837) Rev1.0", "Pi0 W", "Pi2 (2837) Rev1.2", "Pi3 B+"]
