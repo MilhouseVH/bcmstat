@@ -1405,7 +1405,7 @@ def main(args):
       COLOUR = False
     elif a1 == "d":
       DELAY = int(a2)
-    elif a1 == "H": 
+    elif a1 == "H":
       HDREVERY = int(a2)
 
     elif a1 == "i":
