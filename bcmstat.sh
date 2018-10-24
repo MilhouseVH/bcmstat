@@ -520,6 +520,17 @@ def getCPULoad(storage, proc, sysinfo):
       c.append(minmax(0, 100, (core[i] / nproc)))
     storage[0] = (dTime, [c[0], c[1], c[2], c[3], c[4], c[5], c[6], 100 - c[3]])
 
+# Simple View of Total system load (combines hardware interrupts, software interrupts, and I/O waits into sys; removes idle)
+def getSimpleCPULoad(storage, proc, sysinfo):
+  if proc[2][0] != 0:
+    dTime = proc[0][0]
+    core = proc[0][1]["cpu"]
+    nproc = sysinfo["nproc"]
+    c = []
+    for i in range(0, 10):
+      c.append(minmax(0, 100, (core[i] / nproc)))
+    storage[0] = (dTime, [c[0], c[1], c[2] + c[4] + c[5] + c[6], 100 - c[3]])
+
 # Individual core loads
 def getCoreStats(storage, proc):
   if proc[2][0] != 0:
@@ -899,6 +910,10 @@ def ShowHeadings(display_flags, sysinfo):
     HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
     HDR2 = "%s ====== ====== ====== ====== ====== ====== ====== ======" % HDR2
 
+  if display_flags["sutilisation"]:
+    HDR1 = "%s  %%user  %%nice  %%sys+ %%total" % HDR1
+    HDR2 = "%s ====== ====== ====== ======" % HDR2
+
   if display_flags["cpu_cores"]:
     for i in range(0, sysinfo["nproc"]):
       HDR1 = "%s   cpu%d" % (HDR1, i)
@@ -968,7 +983,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     elif throt_hist == 1: 
       dThrottled = "t"
       nThrottled = 2
-      
+
     LINE = "%s %s%s%s" % \
              (LINE,
               colourise(dVolts,     "%s", 1, 2, 3, False, compare=nVolts),
@@ -1012,6 +1027,14 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
               colourise(cpuload[5], "%6.2f",     2,  5, 10, False),
               colourise(cpuload[6], "%6.2f",   7.5, 15, 20, False),
               colourise(cpuload[7], "%6.2f",    30, 50, 70, False))
+
+  if display_flags["sutilisation"]:
+    LINE = "%s %s %s %s %s" % \
+             (LINE,
+              colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
+              colourise(cpuload[1], "%6.2f",    10, 20, 30, False),
+              colourise(cpuload[2], "%6.2f",    30, 50, 70, False),
+              colourise(cpuload[3], "%6.2f",    30, 50, 70, False))
 
   if display_flags["cpu_cores"]:
     for core in cores:
@@ -1092,7 +1115,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [y|Y] [x|X] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -1103,7 +1126,8 @@ def ShowHelp():
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
   print("y/Y      Do (y)/don't (Y) show threshold event flags (U=under-voltage, F=ARM freq capped, T=currently throttled, lowercase if event has occurred in the past")
-  print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats")
+  print("r/R      Do (r)/don't (R) monitor simple CPU load and memory usage stats (not compatible with x/X)")
+  print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats (not compatible with r/R)")
   print("p/P      Do (p)/don't (P) monitor individual core load stats (when core count > 1)")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
@@ -1312,6 +1336,7 @@ def main(args):
   STATS_WITH_VOLTS = False
   STATS_CPU_MEM = False
   STATS_UTILISATION = False
+  SIMPLE_UTILISATION = False
   STATS_CPU_CORE= False
   STATS_GPU_R = False
   STATS_GPU_M = False
@@ -1380,7 +1405,7 @@ def main(args):
       COLOUR = False
     elif a1 == "d":
       DELAY = int(a2)
-    elif a1 == "H":
+    elif a1 == "H": 
       HDREVERY = int(a2)
 
     elif a1 == "i":
@@ -1419,6 +1444,13 @@ def main(args):
     elif a1 == "X":
       STATS_CPU_MEM = False
       STATS_UTILISATION = False
+
+    elif a1 == "r":
+      STATS_CPU_MEM = True
+      SIMPLE_UTILISATION = True
+    elif a1 == "R":
+      STATS_CPU_MEM = False
+      SIMPLE_UTILISATION = False
 
     elif a1 == "p":
       STATS_CPU_CORE = True
@@ -1545,7 +1577,7 @@ def main(args):
     STATS_CPU_MEM = True
     STATS_GPU_R = True
 
-  if STATS_CPU_CORE or STATS_UTILISATION:
+  if STATS_CPU_CORE or STATS_UTILISATION or SIMPLE_UTILISATION:
     getProcStats(PROC)
 
   if STATS_CPU_MEM:
@@ -1565,6 +1597,7 @@ def main(args):
                    "cpu_mem":     STATS_CPU_MEM,
                    "core_volts":  STATS_WITH_VOLTS,
                    "utilisation": STATS_UTILISATION,
+                   "sutilisation": SIMPLE_UTILISATION,
                    "cpu_cores":   STATS_CPU_CORE,
                    "gpu_reloc":   STATS_GPU_R,
                    "gpu_malloc":  STATS_GPU_M,
@@ -1594,7 +1627,7 @@ def main(args):
     if STATS_NETWORK:
       getNetwork(NET, INTERFACE)
 
-    if STATS_CPU_CORE or STATS_UTILISATION:
+    if STATS_CPU_CORE or STATS_UTILISATION or SIMPLE_UTILISATION:
       getProcStats(PROC)
 
     if STATS_CPU_CORE:
@@ -1602,6 +1635,9 @@ def main(args):
 
     if STATS_UTILISATION:
       getCPULoad(CPU, PROC, sysinfo)
+
+    if SIMPLE_UTILISATION:
+      getSimpleCPULoad(CPU, PROC, sysinfo)
 
     if STATS_CPU_MEM:
       getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
