@@ -113,7 +113,7 @@ class RPIHardware():
     pretty.append("rev %s," % rev)
     pretty.append("BCM%s SoC with %s RAM" % (self.hardware_fmt["processor"], self.hardware_fmt["memsize"]))
     pretty.append("by %s" % self.hardware_fmt["manufacturer"])
-    
+
     return " ".join(pretty)
 
   def dump(self):
@@ -333,7 +333,7 @@ def runcommand(command, ignore_error=False):
       return None
     else:
       raise
-    
+
 def find_vcgencmd_vcdbg():
   global VCGENCMD, VCDBGCMD, VCGENCMD_GET_MEM
 
@@ -665,7 +665,7 @@ def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
 
   data = {}
   if STATS_GPU_R:
-    if freemem_r == "": 
+    if freemem_r == "":
       freemem_r = "???"
       bfreemem_r = 0
       percent_free_r = 0
@@ -675,7 +675,7 @@ def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
     data["reloc"] = [freemem_r, bfreemem_r, int(percent_free_r), GPU_ALLOCATED_R]
 
   if STATS_GPU_M:
-    if freemem_m == "": 
+    if freemem_m == "":
       freemem_m = "???"
       bfreemem_m = 0
       percent_free_m = 0
@@ -729,7 +729,7 @@ def getsysinfo(HARDWARE):
   sysinfo = {}
 
   RPI_MODEL = HARDWARE.GetPiModel() # RPi1, RPi2, RPi3 etc.
-  
+
   VCG_INT = vcgencmd_items("get_config int", isInt=True)
 
   CORE_DEFAULT_IDLE = CORE_DEFAULT_BUSY = 250
@@ -983,7 +983,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     if throt_now == 1:
       dThrottled = "T"
       nThrottled = 3
-    elif throt_hist == 1: 
+    elif throt_hist == 1:
       dThrottled = "t"
       nThrottled = 2
 
@@ -1064,7 +1064,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
               colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
 
   if display_flags["cpu_mem"]:
-    
+
     if display_flags["human_readable"]:
       LINE = "%s %s / %s" % \
                (LINE,
@@ -1131,7 +1131,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [k] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -1144,7 +1144,7 @@ def ShowHelp():
   print("M        Run at maximum priority (nice -20)")
   print("y/Y      Do (y)/don't (Y) show threshold event flags (U=under-voltage, F=ARM freq capped, T=currently throttled, lowercase if event has occurred in the past")
   print("r/R      Do (r)/don't (R) monitor simple CPU load and memory usage stats (not compatible with x/X)")
-  print("x/X      Do (x)/don't (X) monitor additional CPU load and memory usage stats (not compatible with r/R)")
+  print("x/X      Do (x)/don't (X) monitor detailed CPU load and memory usage stats (not compatible with r/R)")
   print("p/P      Do (p)/don't (P) monitor individual core load stats (when core count > 1)")
   print("g/G      Do (g)/don't (G) monitor additional GPU memory stats (reloc memory)")
   print("f/F      Do (f)/don't (F) monitor additional GPU memory stats (malloc memory)")
@@ -1164,7 +1164,7 @@ def ShowHelp():
   print()
   print("h        Print this help")
   print()
-  print("Set default properties in ~/.bcmstat.conf")
+  print("Set default properties in ~/.bcmstat.conf or ~/.config/bcmstat.conf")
   print()
   print("Note: Default behaviour is to run at lowest possible priority (L) unless N or M specified.")
 
@@ -1457,19 +1457,21 @@ def main(args):
     elif a1 == "Y":
       STATS_THRESHOLD = False
 
+    elif a1 == "r":
+      STATS_CPU_MEM = True
+      SIMPLE_UTILISATION = True
+      STATS_UTILISATION = False
+    elif a1 == "R":
+      STATS_CPU_MEM = False
+      SIMPLE_UTILISATION = False
+
     elif a1 == "x":
       STATS_CPU_MEM = True
+      SIMPLE_UTILISATION = False
       STATS_UTILISATION = True
     elif a1 == "X":
       STATS_CPU_MEM = False
       STATS_UTILISATION = False
-
-    elif a1 == "r":
-      STATS_CPU_MEM = True
-      SIMPLE_UTILISATION = True
-    elif a1 == "R":
-      STATS_CPU_MEM = False
-      SIMPLE_UTILISATION = False
 
     elif a1 == "p":
       STATS_CPU_CORE = True
@@ -1700,3 +1702,4 @@ if __name__ == "__main__":
       for item in sorted(PEAKVALUES): line = "%s%s%s: %s" % (line, (", " if line else ""), item[3:], PEAKVALUES[item])
       print("Peak Values: %s" % line)
     if type(e) == SystemExit: sys.exit(int(str(e)))
+
