@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 0.5.1 (27/10/2018)
+* Add: support for human-readable memory and network values
+* Fix: default frequencies
+
+## Version 0.5.0 (07/09/2018)
+* Add: 64-bit OS support
+
 ## Version 0.4.9 (14/03/2018)
 * Add: Support for Pi3 Model B+
 * Add: `e` option to display core voltage
