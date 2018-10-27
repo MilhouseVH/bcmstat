@@ -748,6 +748,9 @@ def getsysinfo(HARDWARE):
   elif RPI_MODEL == "RPi3":
     ARM_DEFAULT_IDLE = 600
     SDRAM_DEFAULT = 450
+  else:
+    ARM_DEFAULT_IDLE = 600
+    SDRAM_DEFAULT = 450
 
   sysinfo["hardware"]   = HARDWARE
   sysinfo["model"]      = RPI_MODEL
