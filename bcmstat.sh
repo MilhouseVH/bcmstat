@@ -44,7 +44,7 @@ else:
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
 ANALYTICS = "http://goo.gl/edu1jG"
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -60,7 +60,7 @@ SYSINFO = {}
 # NEW          23: will be 1 for the new scheme, 0 for the old scheme
 # MEMSIZE      20: 0=256M 1=512M 2=1G
 # MANUFACTURER 16: 0=SONY 1=EGOMAN 2=EMBEST 3=SONY JAPAN 4=EMBEST
-# PROCESSOR    12: 0=2835 1=2836 2=2837
+# PROCESSOR    12: 0=2835 1=2836 2=2837, 3=2838
 # TYPE         04: 0=MODELA 1=MODELB 2=MODELA+ 3=MODELB+ 4=Pi2 MODELB 5=ALPHA 6=CM 8=Pi3 9=Pi0 10=CM3 12=Pi0W
 # REV          00: 0=REV0 1=REV1 2=REV2 3=REV3
 
@@ -84,10 +84,10 @@ class RPIHardware():
 
     # Note: Some of these memory sizes and processors are fictional and relate to unannounced products - logic would
     #       dictate such products may exist at some point in the future, but it's only guesswork.
-    self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB"]
+    self.memsizes = ["256MB", "512MB", "1GB", "2GB", "4GB", "8GB"]
     self.manufacturers = ["Sony UK", "Egoman", "Embest", "Sony Japan", "Embest", "Stadium"]
     self.processors = ["2835", "2836", "2837", "2838", "2839", "2840"]
-    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W", "Pi3 Model B+"]
+    self.models = ["Model A", "Model B", "Model A+", "Model B+", "Pi2 Model B", "Alpha", "CM1", "Unknown", "Pi3", "Pi0", "CM3", "Unknown", "Pi0 W", "Pi3 Model B+", "Pi3 Model A+", "Unknown", "CM3+", "Pi4 Model B"]
     self.pcbs = ["Unknown", "Pi3 Rev1.0", "Pi3 Rev1.2", "Pi2 2837 Rev1.1", "Pi2 2836", "Pi1 B+ Rev 1.1", "Pi0", "Pi1 B Rev2.0", "Pi2 (2837) Rev1.0", "Pi0 W", "Pi2 (2837) Rev1.2", "Pi3 B+"]
 
     self.set_rev_code(rev_code)
@@ -909,8 +909,8 @@ def ShowHeadings(display_flags, sysinfo):
       HDR1 = "%s RX kB/s TX kB/s" % HDR1
       HDR2 = "%s ======= =======" % HDR2
     else:
-      HDR1 = "%s     RX B/s     TX B/s" % HDR1
-      HDR2 = "%s ========== ==========" % HDR2
+      HDR1 = "%s      RX B/s      TX B/s" % HDR1
+      HDR2 = "%s =========== ===========" % HDR2
 
   if display_flags["utilisation"]:
     HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
@@ -937,8 +937,12 @@ def ShowHeadings(display_flags, sysinfo):
     HDR2 = "%s ===========" % HDR2
 
   if display_flags["cpu_mem"]:
-    HDR1 = "%s Mem Free / %%used" % HDR1
-    HDR2 = "%s ================" % HDR2
+    if display_flags["human_readable"]:
+      HDR1 = "%s MemFreeMB / %%used" % HDR1
+      HDR2 = "%s =================" % HDR2
+    else:
+      HDR1 = "%s MemFreeKB / %%used" % HDR1
+      HDR2 = "%s =================" % HDR2
     if display_flags["swap"]:
       HDR1 = "%s(SwUse)" % HDR1
       HDR2 = "%s=======" % HDR2
@@ -1025,8 +1029,8 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     else:
       LINE = "%s %s %s" % \
                (LINE,
-                colourise(network[0],         "%10s",     0.5e6,    2.5e6,    5.0e6, True),
-                colourise(network[1],         "%10s",     0.5e6,    2.5e6,    5.0e6, True))
+                colourise(network[0],         "%11s",     0.5e6,    2.5e6,    5.0e6, True),
+                colourise(network[1],         "%11s",     0.5e6,    2.5e6,    5.0e6, True))
 
   if display_flags["utilisation"]:
     LINE = "%s %s %s %s %s %s %s %s %s" % \
@@ -1071,12 +1075,12 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     if display_flags["human_readable"]:
       LINE = "%s %s / %s" % \
                (LINE,
-                colourise(memory[1]/1024,  "%5s MB",   60, 75, 85, True,  compare=memory[2]),
-                colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
+                colourise(memory[1]/1024,  "%9s",      60, 75, 85, True,  compare=memory[2]),
+                colourise(memory[2],       "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
     else :
-      LINE = "%s %s/%s" % \
+      LINE = "%s %s / %s" % \
                (LINE,
-                colourise(memory[1],  "%7s kB",   60, 75, 85, True,  compare=memory[2]),
+                colourise(memory[1],  "%9s",      60, 75, 85, True,  compare=memory[2]),
                 colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
 
     # Swap memory
