@@ -452,7 +452,8 @@ def getIRQ(storage):
 
   irq = 0
   for i in grep("dwc", readfile("/proc/interrupts"), 1).split("\n"):
-    irq += int(i)
+    if i:
+      irq += int(i)
 
   storage[1] = (time.time(), irq)
 
