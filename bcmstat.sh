@@ -447,13 +447,19 @@ def colourise(display, nformat, green, yellow, red, withcomma, compare=None, add
 
   return nformat % cnum
 
-def getIRQ(storage):
+def getIRQ(storage, sysinfo):
   storage[2] = storage[1]
 
+  nproc = sysinfo["nproc"]
   irq = 0
-  for i in grep("dwc", readfile("/proc/interrupts"), 1).split("\n"):
-    if i:
-      irq += int(i)
+  for line in grep(":", readfile("/proc/interrupts")).split("\n"):
+    fields = line.split(" ")
+    if fields[0] == "FIQ:":
+      continue
+    if fields[0] == "Err:":
+      break
+    for n in range(1, nproc + 1):
+      irq += int(fields[n])
 
   storage[1] = (time.time(), irq)
 
@@ -1600,7 +1606,7 @@ def main(args):
     HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
   getBCM283X(BCM, STATS_WITH_VOLTS)
-  getIRQ(IRQ)
+  getIRQ(IRQ, sysinfo)
   getNetwork(NET, INTERFACE)
 
   STATS_NETWORK = (NET[1][1] != "")
@@ -1655,7 +1661,7 @@ def main(args):
       HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
     getBCM283X(BCM, STATS_WITH_VOLTS)
-    getIRQ(IRQ)
+    getIRQ(IRQ, sysinfo)
 
     if STATS_NETWORK:
       getNetwork(NET, INTERFACE)
