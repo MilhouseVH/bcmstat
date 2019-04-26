@@ -51,7 +51,8 @@ VCDBGCMD = None
 GPU_ALLOCATED_R = None
 GPU_ALLOCATED_M = None
 SUDO = ""
-TMAX = 0.0
+TCMAX = 0.0
+TPMAX = 0.0
 LIMIT_TEMP = True
 COLOUR = False
 SYSINFO = {}
@@ -570,15 +571,27 @@ def getNetwork(storage, interface):
     dTX = cTX - pTX
     storage[0] = (dTime, [int(dRX/dTime), int(dTX/dTime), dRX, dTX])
 
-def getBCM283X(storage, STATS_WITH_VOLTS):
-  global TMAX, LIMIT_TEMP
+def getBCM283X(storage, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
+  global TCMAX, LIMIT_TEMP, TPMAX
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
   tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
   tCore = 0 if tCore < 0 else tCore
   if LIMIT_TEMP:
-    TMAX  = tCore if (tCore > TMAX and tCore < 85000) else TMAX
+    TCMAX = tCore if (tCore > TCMAX and tCore < 85000) else TCMAX
   else:
-    TMAX  = tCore if tCore > TMAX else TMAX
+    TCMAX = tCore if tCore > TCMAX else TCMAX
+
+  if STATS_WITH_PMIC_TEMP:
+    tPMIC = vcgencmd("measure_temp pmic", split=False)
+    if tPMIC.find("error") != -1:
+      tPMIC = None
+      tPMIC_MAX = None
+    else:
+      tPMIC = float(tPMIC.split("=")[1].replace("'C",""))
+      TPMAX = tPMIC if tPMIC > TPMAX else TPMAX
+  else:
+    tPMIC = None
+    tPMIC_MAX = None
 
   if STATS_WITH_VOLTS:
     volts = vcgencmd("measure_volts core")
@@ -594,8 +607,8 @@ def getBCM283X(storage, STATS_WITH_VOLTS):
                 [int(vcgencmd("measure_clock arm")) + 500000,
                  int(vcgencmd("measure_clock core")) + 500000,
                  int(vcgencmd("measure_clock h264")) + 500000,
-                 tCore,
-                 TMAX,
+                 tCore, TCMAX,
+                 tPMIC, TPMAX,
                  volts])
 
   if storage[2][0] != 0:
@@ -908,8 +921,15 @@ def ShowHeadings(display_flags, sysinfo):
     HDR1 = "%s Vcore " % HDR1
     HDR2 = "%s ======" % HDR2
 
-  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)  IRQ/s" % HDR1
-  HDR2 = "%s ======= ======= ======= =============== ======" % HDR2
+  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)" % HDR1
+  HDR2 = "%s ======= ======= ======= ===============" % HDR2
+
+  if display_flags["temp_pmic"]:
+    HDR1 = "%s PMIC Temp (Max)" % HDR1
+    HDR2 = "%s ===============" % HDR2
+
+  HDR1 = "%s  IRQ/s" % HDR1
+  HDR2 = "%s ======" % HDR2
 
   if display_flags["network"]:
     if display_flags["human_readable"]:
@@ -1016,15 +1036,26 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
   fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
 
   if display_flags["core_volts"]:
-    LINE = "%s %s" % (LINE, bcm2385[5])
+    LINE = "%s %s" % (LINE, bcm2385[7])
 
-  LINE = "%s %s %s %s %s (%s) %s" % \
+  LINE = "%s %s %s %s %s (%s)" % \
            (LINE,
             colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
             colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
             colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
             colourise(bcm2385[3]/1000,    fTC,         50.0,     70.0,     80.0, False),
-            colourise(bcm2385[4]/1000,    fTM,         50.0,     70.0,     80.0, False),
+            colourise(bcm2385[4]/1000,    fTM,         50.0,     70.0,     80.0, False))
+
+  if display_flags["temp_pmic"]:
+    fTC = "%5.2fC" if bcm2385[5] < 100000 else "%5.1fC"
+    fTM = "%5.2fC" if bcm2385[6] < 100000 else "%5.1fC"
+    LINE = "%s %s (%s)" % \
+             (LINE,
+              colourise(bcm2385[5],    fTC,         50.0,     70.0,     80.0, False),
+              colourise(bcm2385[6],    fTM,         50.0,     70.0,     80.0, False))
+
+  LINE = "%s %s" % \
+           (LINE,
             colourise(irq[0],             "%6s",        500,     2500,     5000, True))
 
   if display_flags["network"]:
@@ -1145,7 +1176,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [k] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [k] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [t] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -1168,6 +1199,7 @@ def ShowHelp():
   print("D        Show delta memory - negative: memory allocated, positive: memory freed")
   print("A        Show accumulated delta memory - negative: memory allocated, positive: memory freed")
   print("T        Maximum temperature is normally capped at 85C - use this option to disable temperature cap")
+  print("t        Show PMIC temperature (if available, ignore if not)")
   print()
   print("V        Check version")
   print("U        Update to latest version if an update is available")
@@ -1365,6 +1397,7 @@ def main(args):
   STATS_THRESHOLD = False
   STATS_THRESHOLD_CLEAR = False
   STATS_WITH_VOLTS = False
+  STATS_WITH_PMIC_TEMP = False
   STATS_CPU_MEM = False
   STATS_UTILISATION = False
   SIMPLE_UTILISATION = False
@@ -1495,6 +1528,9 @@ def main(args):
     elif a1 == "T":
       LIMIT_TEMP = False
 
+    elif a1 == "t":
+      STATS_WITH_PMIC_TEMP = True
+
     elif a1 == "D":
       STATS_DELTAS = True
 
@@ -1605,8 +1641,12 @@ def main(args):
   if STATS_THRESHOLD:
     HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
-  getBCM283X(BCM, STATS_WITH_VOLTS)
+  getBCM283X(BCM, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
+  if BCM[1][1][5] == None:
+    STATS_WITH_PMIC_TEMP = False
+
   getIRQ(IRQ, sysinfo)
+
   getNetwork(NET, INTERFACE)
 
   STATS_NETWORK = (NET[1][1] != "")
@@ -1642,7 +1682,8 @@ def main(args):
                    "gpu_malloc":  STATS_GPU_M,
                    "swap":        (SWAP_ENABLED and INCLUDE_SWAP),
                    "deltas":      STATS_DELTAS,
-                   "accumulated": STATS_ACCUMULATED}
+                   "accumulated": STATS_ACCUMULATED,
+                   "temp_pmic":   STATS_WITH_PMIC_TEMP}
 
   #Store peak values
   PEAKVALUES = {"01#IRQ":0, "02#RX":0, "03#TX":0}
@@ -1660,7 +1701,8 @@ def main(args):
     if STATS_THRESHOLD:
       HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
 
-    getBCM283X(BCM, STATS_WITH_VOLTS)
+    getBCM283X(BCM, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
+
     getIRQ(IRQ, sysinfo)
 
     if STATS_NETWORK:
