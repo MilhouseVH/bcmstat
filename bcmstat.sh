@@ -629,7 +629,7 @@ def getMemory(storage, include_swap):
 
   for line in readfile("/proc/meminfo").split("\n"):
     field_groups = re.search("^(.*):[ ]*([0-9]*) .*$", line)
-    if field_groups.group(1) in ["MemFree", "Buffers", "Cached"]:
+    if field_groups.group(1) in ["MemFree", "Buffers", "Cached", "SReclaimable"]:
       MEMFREE += int(field_groups.group(2))
     elif field_groups.group(1) == "MemTotal":
       MEMTOTAL = int(field_groups.group(2))
