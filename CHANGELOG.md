@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.5.2 (24/06/2019)
+* Add: RPi4 support
+* Fix: tweak free memory calculation
+
 ## Version 0.5.1 (27/10/2018)
 * Add: support for human-readable memory and network values
 * Fix: default frequencies
