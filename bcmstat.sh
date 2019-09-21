@@ -787,6 +787,9 @@ def getsysinfo(HARDWARE):
     sysinfo["arm_min"] = int((int(vcgencmd("measure_clock arm")) + 500000) / 1e6)
     sysinfo["arm_max"] = sysinfo["arm_min"]
 
+  if "sdram_freq" not in VCG_INT:
+    VCG_INT["sdram_freq"] = int(int(vcgencmd("measure_clock pllh"))/1e6)
+
   sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", CORE_DEFAULT_BUSY))
   sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", SDRAM_DEFAULT)
