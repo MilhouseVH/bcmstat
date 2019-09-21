@@ -43,7 +43,6 @@ else:
   import urllib2
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
-ANALYTICS = "http://goo.gl/edu1jG"
 VERSION = "0.5.2"
 
 VCGENCMD = None
@@ -1294,47 +1293,9 @@ def downloadLatestVersion(args, autoupdate=False, forceupdate=False):
   return True
 
 def get_latest_version():
-  global GITHUB, ANALYTICS, VERSION
+  global GITHUB
 
-  DIST = "Other"
-  if os.path.exists("/etc/openelec-release"):
-    DIST = "OpenELEC"
-  else:
-    etc_issue = readfile("/etc/issue")
-    if etc_issue:
-      if grep("libreelec", etc_issue, head=1, case_sensitive=False):
-        DIST = "LibreELEC"
-      elif grep("openelec", etc_issue, head=1, case_sensitive=False):
-        DIST = "OpenELEC"
-      if grep("raspbian", etc_issue, head=1, case_sensitive=False):
-        DIST = "Raspbian"
-      elif grep("raspbmc", etc_issue, head=1, case_sensitive=False):
-        DIST = "Raspbmc"
-      elif grep("xbian", etc_issue, head=1, case_sensitive=False):
-        DIST = "XBian"
-      elif grep("osmc", etc_issue, head=1, case_sensitive=False):
-        DIST = "OSMC"
-
-  # Need user agent etc. for analytics
-  user_agent = "Mozilla/5.0 (%s; %s_%s; rv:%s) Gecko/20100101 Py-v%d.%d.%d.%d/1.0" % \
-      (DIST, "ARM", "32", VERSION,
-       sys.version_info[0], sys.version_info[1], sys.version_info[2], sys.version_info[4])
-
-  # Construct "referer" to indicate distribution:
-  USAGE = DIST
-
-  HEADERS = []
-  HEADERS.append(('User-agent', user_agent))
-  HEADERS.append(('Referer', "http://www.%s" % USAGE))
-
-  # Try checking version via Analytics URL
-  (remoteVersion, remoteHash) = get_latest_version_ex(ANALYTICS, headers = HEADERS, checkerror = False)
-
-  # If the Analytics call fails, go direct to github
-  if remoteVersion is None or remoteHash is None:
-    (remoteVersion, remoteHash) = get_latest_version_ex("%s/%s" % (GITHUB, "VERSION"))
-
-  return (remoteVersion, remoteHash)
+  return get_latest_version_ex("%s/%s" % (GITHUB, "VERSION"))
 
 def get_latest_version_ex(url, headers=None, checkerror=True):
   GLOBAL_TIMEOUT = socket.getdefaulttimeout()
@@ -1381,7 +1342,6 @@ def autoUpdate(args):
 
 def main(args):
   global COLOUR, SUDO, LIMIT_TEMP
-  global GITHUB, ANALYTICS, VERSION
   global PEAKVALUES
   global VCGENCMD_GET_MEM
 
