@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 0.5.3 (21/09/2019)
+* Add: RPi4 sdram defaults (thanks vegerot)
+* Add: RPi4 sdram frequency query
+* Fix: Remove Google `goo.gl` URL
+
 ## Version 0.5.2 (24/06/2019)
 * Add: RPi4 support
 * Fix: tweak free memory calculation
