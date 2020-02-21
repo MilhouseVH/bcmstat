@@ -1187,7 +1187,7 @@ def ShowHelp():
   print("m        Monochrome output (no colourise)")
   print("d #      Specify interval (in seconds) between each iteration - default is 2")
   print("H #      Header every n iterations (0 = no header, default is 30)")
-  print("J #      Exit after n iterations (0 = no auto exit (default), must be less or same as header iterations)")
+  print("J #      Exit after n iterations (0 = no auto exit (default))")
   print("i iface  Monitor network interface other than the default eth0/enx<MAC> or wlan0, eg. br1")
   print("k        Show RX/TX and Memory stats in human-friendly units (kB and MB respectively)")
   print("L        Run at lowest priority (nice +20) - default")
@@ -1638,6 +1638,7 @@ def main(args):
     getMemDeltas(DELTAS, MEM, GPU)
 
   count = HDREVERY
+  tcount = 0
   firsthdr = True
 
   display_flags = {"threshold":   STATS_THRESHOLD,
@@ -1661,15 +1662,13 @@ def main(args):
     PEAKVALUES.update({"04#UVOLT":0, "05#FCAPPED":0, "06#THROTTLE":0})
 
   while [ True ]:
-    if QEVERY > 0 and count >= QEVERY and firsthdr == False:
-      #return
-      raise KeyboardInterrupt
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
       ShowHeadings(display_flags, sysinfo)
       firsthdr = False
       count = 0
     count += 1
+    tcount += 1
 
     if STATS_THRESHOLD:
       HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
@@ -1717,6 +1716,9 @@ def main(args):
       n["06#THROTTLE"] = PEAKVALUES["06#THROTTLE"] + UFT[0][1]["throttled"][0]
 
     PEAKVALUES = n
+
+    if QEVERY > 0 and tcount >= QEVERY:
+      raise KeyboardInterrupt
 
     time.sleep(DELAY)
 
