@@ -1,5 +1,8 @@
 # Changelog
 
+## Version 0.5.4 (22/02/2020)
+* Add: Exit after n iterations option, J# (#18)
+
 ## Version 0.5.3 (21/09/2019)
 * Add: RPi4 sdram defaults (thanks vegerot)
 * Add: RPi4 sdram frequency query
