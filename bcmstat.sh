@@ -1187,6 +1187,7 @@ def ShowHelp():
   print("m        Monochrome output (no colourise)")
   print("d #      Specify interval (in seconds) between each iteration - default is 2")
   print("H #      Header every n iterations (0 = no header, default is 30)")
+  print("J #      Exit after n iterations (0 = no auto exit (default))")
   print("i iface  Monitor network interface other than the default eth0/enx<MAC> or wlan0, eg. br1")
   print("k        Show RX/TX and Memory stats in human-friendly units (kB and MB respectively)")
   print("L        Run at lowest priority (nice +20) - default")
@@ -1354,6 +1355,7 @@ def main(args):
 
   DELAY = 2
   HDREVERY = 30
+  QEVERY = 0
 
   COLOUR = True
   QUIET = False
@@ -1439,6 +1441,8 @@ def main(args):
       DELAY = int(a2)
     elif a1 == "H":
       HDREVERY = int(a2)
+    elif a1 == "J":
+      QEVERY = int(a2)
 
     elif a1 == "i":
       INTERFACE = a2
@@ -1634,6 +1638,7 @@ def main(args):
     getMemDeltas(DELTAS, MEM, GPU)
 
   count = HDREVERY
+  tcount = 0
   firsthdr = True
 
   display_flags = {"threshold":   STATS_THRESHOLD,
@@ -1663,6 +1668,7 @@ def main(args):
       firsthdr = False
       count = 0
     count += 1
+    tcount += 1
 
     if STATS_THRESHOLD:
       HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
@@ -1711,6 +1717,9 @@ def main(args):
 
     PEAKVALUES = n
 
+    if QEVERY > 0 and tcount >= QEVERY:
+      raise KeyboardInterrupt
+
     time.sleep(DELAY)
 
 if __name__ == "__main__":
@@ -1724,4 +1733,3 @@ if __name__ == "__main__":
       for item in sorted(PEAKVALUES): line = "%s%s%s: %s" % (line, (", " if line else ""), item[3:], PEAKVALUES[item])
       print("Peak Values: %s" % line)
     if type(e) == SystemExit: sys.exit(int(str(e)))
-
