@@ -3,8 +3,8 @@ bcmstat
 
 Simple Raspberry Pi command line monitoring tool:
 
-* CPU fequencies (ARM, Core, h264)
-* Temperature (current and peak)
+* CPU fequencies (ARM, Core, H264, V3D, ISP)
+* Temperature (current and peak) for Core and/or PMIC
 * IRQ/s
 * Network Rx/Tx
 * System utilisation (percentage user, nice, idle etc.)
@@ -12,12 +12,14 @@ Simple Raspberry Pi command line monitoring tool:
 * GPU mem usage
 * RAM usage (with/without swap)
 * Memory leak detection (`D`/`A` options - instantaneous and accumulated memory deltas)
+* Undervoltage, ARM frequency cap and temperature throttle event monitoring
+* Customisable columns
 
-Tested with Raspbian, OpenELEC and Raspbmc.
+Tested with Raspbian, LibreELEC and OSMC/Raspbmc.
 
 Displayed values can be coloured (white, green, amber and red) to highlight excess usage or resource depletion. Disable with `m` option.
 
-View available options with -h.
+View available options with `-h`.
 
 Specify a default configuration in ~/.bcmstat.conf, eg:
 ```
