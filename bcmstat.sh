@@ -43,7 +43,7 @@ else:
   import urllib2
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
-VERSION = "0.5.4"
+VERSION = "0.5.5"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -55,6 +55,12 @@ TPMAX = 0.0
 LIMIT_TEMP = True
 COLOUR = False
 SYSINFO = {}
+
+DEFAULT_COLS_FILTER = ["UFT", "Vcore", "ARM", "Core", "H264", "TempCore", "TempPMIC", "IRQ", "RX", "TX",
+                       "CPU", "CPUuser", "CPUnice", "CPUsys", "CPUidle", "CPUiowt", "CPUirq", "CPUs/irq", "CPUtotal",
+                       "GPUfree", "MEMfree", "MEMdelta", "MEMaccum"]
+
+EXTRA_COLS_FILTER = ["V3D", "ISP"]
 
 # [USER:8][NEW:1][MEMSIZE:3][MANUFACTURER:4][PROCESSOR:4][TYPE:8][REV:4]
 # NEW          23: will be 1 for the new scheme, 0 for the old scheme
@@ -272,7 +278,7 @@ class RPIHardware():
     return self.hardware_fmt["rev"]
 
   # https://www.raspberrypi.org/forums/viewtopic.php?f=63&t=147781&start=50#p972790
-  def GetThresholdValues(self, storage, withclear):
+  def GetThresholdValues(self, storage, filter, withclear):
     keys = ["under-voltage", "arm-capped", "throttled"]
 
     # If withclear is supported, clear persistent bits after querying (value is "since last query")
@@ -447,7 +453,7 @@ def colourise(display, nformat, green, yellow, red, withcomma, compare=None, add
 
   return nformat % cnum
 
-def getIRQ(storage, sysinfo):
+def getIRQ(storage, filter, sysinfo):
   storage[2] = storage[1]
 
   nproc = sysinfo["nproc"]
@@ -489,7 +495,7 @@ def getDefaultInterface():
 
 # Collect processor stats once per loop, so that consistent stats are
 # used when calculating total system load and individual core loads
-def getProcStats(storage):
+def getProcStats(storage, filter):
   storage[2] = storage[1]
 
   cores = {}
@@ -517,7 +523,7 @@ def getProcStats(storage):
     storage[0] = (dTime, cores)
 
 # Total system load
-def getCPULoad(storage, proc, sysinfo):
+def getCPULoad(storage, filter, proc, sysinfo):
   if proc[2][0] != 0:
     dTime = proc[0][0]
     core = proc[0][1]["cpu"]
@@ -528,7 +534,7 @@ def getCPULoad(storage, proc, sysinfo):
     storage[0] = (dTime, [c[0], c[1], c[2], c[3], c[4], c[5], c[6], 100 - c[3]])
 
 # Simple View of Total system load (combines hardware interrupts, software interrupts, and I/O waits into sys; removes idle)
-def getSimpleCPULoad(storage, proc, sysinfo):
+def getSimpleCPULoad(storage, filter, proc, sysinfo):
   if proc[2][0] != 0:
     dTime = proc[0][0]
     core = proc[0][1]["cpu"]
@@ -539,16 +545,17 @@ def getSimpleCPULoad(storage, proc, sysinfo):
     storage[0] = (dTime, [c[0], c[1], c[2] + c[4] + c[5] + c[6], 100 - c[3]])
 
 # Individual core loads
-def getCoreStats(storage, proc):
-  if proc[2][0] != 0:
-    dTime = proc[0][0]
-    load = []
-    for core in sorted(proc[0][1]):
-      if core == "cpu": continue
-      load.append((core, 100 - minmax(0, 100, proc[0][1][core][3])))
-    storage[0] = (dTime, load)
+def getCoreStats(storage, filter, proc):
+  if "CPU" in filter:
+    if proc[2][0] != 0:
+      dTime = proc[0][0]
+      load = []
+      for core in sorted(proc[0][1]):
+        if core == "cpu": continue
+        load.append((core, 100 - minmax(0, 100, proc[0][1][core][3])))
+      storage[0] = (dTime, load)
 
-def getNetwork(storage, interface):
+def getNetwork(storage, filter, interface):
   storage[2] = storage[1]
   storage[1] = (time.time(), grep("^[ ]*%s:" % interface, readfile("/proc/net/dev")))
 
@@ -570,17 +577,22 @@ def getNetwork(storage, interface):
     dTX = cTX - pTX
     storage[0] = (dTime, [int(dRX/dTime), int(dTX/dTime), dRX, dTX])
 
-def getBCM283X(storage, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
+def getBCM283X(storage, filter, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
   global TCMAX, LIMIT_TEMP, TPMAX
   #Grab temp - ignore temps of 85C as this seems to be an occasional aberration in the reading
-  tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
-  tCore = 0 if tCore < 0 else tCore
-  if LIMIT_TEMP:
-    TCMAX = tCore if (tCore > TCMAX and tCore < 85000) else TCMAX
+  
+  if "TempCore" in filter:
+    tCore = float(readfile("/sys/class/thermal/thermal_zone0/temp"))
+    tCore = 0 if tCore < 0 else tCore
+    if LIMIT_TEMP:
+      TCMAX = tCore if (tCore > TCMAX and tCore < 85000) else TCMAX
+    else:
+      TCMAX = tCore if tCore > TCMAX else TCMAX
   else:
-    TCMAX = tCore if tCore > TCMAX else TCMAX
+    tCore = None
+    TCMAX = None
 
-  if STATS_WITH_PMIC_TEMP:
+  if STATS_WITH_PMIC_TEMP and "TempPMIC" in filter:
     tPMIC = vcgencmd("measure_temp pmic", split=False)
     if tPMIC.find("error") != -1:
       tPMIC = None
@@ -592,7 +604,7 @@ def getBCM283X(storage, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
     tPMIC = None
     tPMIC_MAX = None
 
-  if STATS_WITH_VOLTS:
+  if STATS_WITH_VOLTS and "Vcore" in filter:
     volts = vcgencmd("measure_volts core")
     if volts and (len(volts) - volts.find(".")) < 5:
       volts = "%s00" % volts[:-1]
@@ -601,11 +613,19 @@ def getBCM283X(storage, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
   else:
     volts = ""
 
+  farm = int(vcgencmd("measure_clock arm")) + 500000 if "ARM" in filter else 0
+  fcore = int(vcgencmd("measure_clock core")) + 500000 if "Core" in filter else 0
+  fh264 = int(vcgencmd("measure_clock h264")) + 500000 if "H264" in filter else 0
+  fv3d = int(vcgencmd("measure_clock v3d")) + 500000 if "V3D" in filter else 0
+  fisp = int(vcgencmd("measure_clock isp")) + 500000 if "ISP" in filter else 0
+
   storage[2] = storage[1]
   storage[1] = (time.time(),
-                [int(vcgencmd("measure_clock arm")) + 500000,
-                 int(vcgencmd("measure_clock core")) + 500000,
-                 int(vcgencmd("measure_clock h264")) + 500000,
+                [farm,
+                 fcore,
+                 fh264,
+                 fv3d,
+                 fisp,
                  tCore, TCMAX,
                  tPMIC, TPMAX,
                  volts])
@@ -617,7 +637,7 @@ def getBCM283X(storage, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP):
     dTime = 1 if dTime <= 0 else dTime
     storage[0] = (dTime, s1[1])
 
-def getMemory(storage, include_swap):
+def getMemory(storage, filter, include_swap):
   MEMTOTAL = 0
   MEMFREE = 0
   MEMUSED = 0
@@ -659,7 +679,7 @@ def getMemory(storage, include_swap):
     dTime = 1 if dTime <= 0 else dTime
     storage[0] = (dTime, [s1[1][0], s1[1][1], s1[1][2], s1[1][2] - s2[1][2], s1[1][3]])
 
-def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
+def getGPUMem(storage, filter, STATS_GPU_R, STATS_GPU_M):
   global GPU_ALLOCATED_R, GPU_ALLOCATED_M, VCGENCMD_GET_MEM
 
   if VCGENCMD_GET_MEM:
@@ -709,7 +729,7 @@ def getGPUMem(storage, STATS_GPU_R, STATS_GPU_M):
   if storage[2][0] != 0:
     storage[0] = (storage[1][0] - storage[2][0], data)
 
-def getMemDeltas(storage, MEM, GPU):
+def getMemDeltas(storage, filter, MEM, GPU):
   storage[2] = storage[1]
   storage[1] = (time.time(), MEM[1], GPU[1])
 
@@ -753,6 +773,8 @@ def getsysinfo(HARDWARE):
 
   CORE_DEFAULT_IDLE = CORE_DEFAULT_BUSY = 250
   H264_DEFAULT_IDLE = H264_DEFAULT_BUSY = 250
+  V3D_DEFAULT_IDLE = V3D_DEFAULT_BUSY = 250
+  ISP_DEFAULT_IDLE = ISP_DEFAULT_BUSY = 250
 
   if VCG_INT.get("disable_auto_turbo", 0) == 0:
     CORE_DEFAULT_BUSY += 50
@@ -792,6 +814,8 @@ def getsysinfo(HARDWARE):
 
   sysinfo["core_max"]   = VCG_INT.get("core_freq", VCG_INT.get("gpu_freq", CORE_DEFAULT_BUSY))
   sysinfo["h264_max"]   = VCG_INT.get("h264_freq", VCG_INT.get("gpu_freq", H264_DEFAULT_BUSY))
+  sysinfo["v3d_max"]   = VCG_INT.get("v3d_freq", VCG_INT.get("gpu_freq", V3D_DEFAULT_BUSY))
+  sysinfo["isp_max"]   = VCG_INT.get("isp_freq", VCG_INT.get("gpu_freq", ISP_DEFAULT_BUSY))
   sysinfo["sdram_max"]  = VCG_INT.get("sdram_freq", SDRAM_DEFAULT)
   sysinfo["arm_volt"]   = VCG_INT.get("over_voltage", 0)
   sysinfo["sdram_volt"] = MaxSDRAMOffset()
@@ -801,14 +825,22 @@ def getsysinfo(HARDWARE):
   if sysinfo["force_turbo"]:
     core_min = sysinfo["core_max"]
     h264_min = sysinfo["h264_max"]
+    v3d_min = sysinfo["v3d_max"]
+    isp_min = sysinfo["isp_max"]
   else:
     core_min = CORE_DEFAULT_IDLE
     h264_min = H264_DEFAULT_IDLE
+    v3d_min = V3D_DEFAULT_IDLE
+    isp_min = ISP_DEFAULT_IDLE
     core_min = sysinfo["core_max"] if sysinfo["core_max"] < core_min else core_min
     h264_min = sysinfo["h264_max"] if sysinfo["h264_max"] < h264_min else h264_min
+    v3d_min = sysinfo["v3d_max"] if sysinfo["v3d_max"] < v3d_min else v3d_min
+    isp_min = sysinfo["isp_max"] if sysinfo["isp_max"] < isp_min else isp_min
 
   sysinfo["core_min"] = core_min
   sysinfo["h264_min"] = h264_min
+  sysinfo["v3d_min"] = v3d_min
+  sysinfo["isp_min"] = isp_min
 
   # Calculate thresholds for green/yellow/red colour
   arm_min = sysinfo["arm_min"] - 10
@@ -820,10 +852,18 @@ def getsysinfo(HARDWARE):
   h264_min = sysinfo["h264_min"] - 10
   h264_max = sysinfo["h264_max"] - 5 if sysinfo["h264_max"] > H264_DEFAULT_IDLE else 1e6
 
+  v3d_min = sysinfo["v3d_min"] - 10
+  v3d_max = sysinfo["v3d_max"] - 5 if sysinfo["v3d_max"] > V3D_DEFAULT_IDLE else 1e6
+
+  isp_min = sysinfo["isp_min"] - 10
+  isp_max = sysinfo["isp_max"] - 5 if sysinfo["isp_max"] > ISP_DEFAULT_IDLE else 1e6
+
   limits = {}
   limits["arm"] = (arm_min, arm_max)
   limits["core"] = (core_min, core_max)
   limits["h264"] = (h264_min, h264_max)
+  limits["v3d"] = (v3d_min, v3d_max)
+  limits["isp"] = (isp_min, isp_max)
   sysinfo["limits"] = limits
 
   return sysinfo
@@ -914,82 +954,94 @@ def ShowConfig(nice_value, priority_desc, sysinfo, args):
   print("  Codecs: %s" % " ".join(CODECS))
   printn("  Booted: %s" % BOOTED)
 
-def ShowHeadings(display_flags, sysinfo):
+def addHeadingValue(filter, name, value, var1, var2, padding=' '):
+  if name in filter:
+    return ("%s%s%s" % (var1, padding, value), "%s%s%s" % (var2, padding, "="*len(value)))
+  else:
+    return (var1, var2)
+
+def addDetailValue(filter, name, value, var1, padding=' ', prefix='', suffix=''):
+  if name in filter:
+    return "%s%s%s%s%s" % (var1, padding, prefix, value, suffix)
+  else:
+    return var1
+
+def ShowHeadings(filter, display_flags, sysinfo):
   HDR1 = "Time    "
   HDR2 = "========"
 
   if display_flags["threshold"]:
-    HDR1 = "%s UFT" % HDR1
-    HDR2 = "%s ===" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "UFT", "UFT", HDR1, HDR2)
 
   if display_flags["core_volts"]:
-    HDR1 = "%s Vcore " % HDR1
-    HDR2 = "%s ======" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "Vcore", "Vcore ", HDR1, HDR2)
 
-  HDR1 = "%s     ARM    Core    H264 Core Temp (Max)" % HDR1
-  HDR2 = "%s ======= ======= ======= ===============" % HDR2
+  (HDR1, HDR2) = addHeadingValue(filter, "ARM",              "    ARM", HDR1, HDR2)
+  (HDR1, HDR2) = addHeadingValue(filter, "Core",             "   Core", HDR1, HDR2)
+  (HDR1, HDR2) = addHeadingValue(filter, "H264",             "   H264", HDR1, HDR2)
+  (HDR1, HDR2) = addHeadingValue(filter, "V3D",              "    V3D", HDR1, HDR2)
+  (HDR1, HDR2) = addHeadingValue(filter, "ISP",              "    ISP", HDR1, HDR2)
+  (HDR1, HDR2) = addHeadingValue(filter, "TempCore", "Core Temp (Max)", HDR1, HDR2)
 
   if display_flags["temp_pmic"]:
-    HDR1 = "%s PMIC Temp (Max)" % HDR1
-    HDR2 = "%s ===============" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "TempPMIC", "PMIC Temp (Max)", HDR1, HDR2)
 
-  HDR1 = "%s  IRQ/s" % HDR1
-  HDR2 = "%s ======" % HDR2
+  (HDR1, HDR2) = addHeadingValue(filter, "IRQ", " IRQ/s", HDR1, HDR2)
 
   if display_flags["network"]:
     if display_flags["human_readable"]:
-      HDR1 = "%s RX kB/s TX kB/s" % HDR1
-      HDR2 = "%s ======= =======" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "RX", "RX kB/s", HDR1, HDR2)
+      (HDR1, HDR2) = addHeadingValue(filter, "TX", "TX kB/s", HDR1, HDR2)
     else:
-      HDR1 = "%s      RX B/s      TX B/s" % HDR1
-      HDR2 = "%s =========== ===========" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "RX", "     RX B/s", HDR1, HDR2)
+      (HDR1, HDR2) = addHeadingValue(filter, "TX", "     TX B/s", HDR1, HDR2)
 
   if display_flags["utilisation"]:
-    HDR1 = "%s  %%user  %%nice   %%sys  %%idle  %%iowt   %%irq %%s/irq %%total" % HDR1
-    HDR2 = "%s ====== ====== ====== ====== ====== ====== ====== ======" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUuser",  " %user", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUnice",  " %nice", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUsys",   "  %sys", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUidle",  " %idle", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUiowt",  " %iowt", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUirq",   "  %irq", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUs/irq", "%s/irq", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUtotal", "%total", HDR1, HDR2)
 
   if display_flags["sutilisation"]:
-    HDR1 = "%s  %%user  %%nice  %%sys+ %%total" % HDR1
-    HDR2 = "%s ====== ====== ====== ======" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUuser",  " %user", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUnice",  " %nice", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUsys",   " %sys+", HDR1, HDR2)
+    (HDR1, HDR2) = addHeadingValue(filter, "CPUtotal", "%total", HDR1, HDR2)
 
   if display_flags["cpu_cores"]:
     for i in range(0, sysinfo["nproc"]):
-      HDR1 = "%s   cpu%d" % (HDR1, i)
-      HDR2 = "%s ======" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "CPU", "  cpu%d" % i, HDR1, HDR2)
 
   if display_flags["gpu_malloc"]:
-    HDR1 = "%s Malloc Free" % HDR1
-    HDR2 = "%s ===========" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "GPUfree", "Malloc Free", HDR1, HDR2)
 
   if display_flags["gpu_reloc"]:
     if display_flags["gpu_malloc"]:
-      HDR1 = "%s Reloc  Free" % HDR1
+      (HDR1, HDR2) = addHeadingValue(filter, "GPUfree", "Reloc  Free", HDR1, HDR2)
     else:
-      HDR1 = "%s GPUMem Free" % HDR1
-    HDR2 = "%s ===========" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "GPUfree", "GPUMem Free", HDR1, HDR2)
 
   if display_flags["cpu_mem"]:
     if display_flags["human_readable"]:
-      HDR1 = "%s MemFreeMB / %%used" % HDR1
-      HDR2 = "%s =================" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "MEMfree", "MemFreeMB / %used", HDR1, HDR2)
     else:
-      HDR1 = "%s MemFreeKB / %%used" % HDR1
-      HDR2 = "%s =================" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "MEMfree", "MemFreeKB / %used", HDR1, HDR2)
     if display_flags["swap"]:
-      HDR1 = "%s(SwUse)" % HDR1
-      HDR2 = "%s=======" % HDR2
+      (HDR1, HDR2) = addHeadingValue(filter, "MEMfree", "(SwUse)", HDR1, HDR2, padding='')
 
   if display_flags["deltas"]:
-    HDR1 = "%s Delta  GPU B     Mem kB" % HDR1
-    HDR2 = "%s =======================" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "MEMdelta", "Delta  GPU B     Mem kB", HDR1, HDR2)
 
   if display_flags["accumulated"]:
-    HDR1 = "%s Accum  GPU B     Mem kB" % HDR1
-    HDR2 = "%s =======================" % HDR2
+    (HDR1, HDR2) = addHeadingValue(filter, "MEMaccum", "Accum  GPU B     Mem kB", HDR1, HDR2)
 
   printn("%s\n%s" % (HDR1, HDR2))
 
-def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
+def ShowStats(filter, display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload, memory, gpumem, cores, deltas):
   global ARM_MIN, ARM_MAX
 
   now = datetime.datetime.now()
@@ -997,7 +1049,7 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
 
   LINE = "%s" % TIME
 
-  if display_flags["threshold"]:
+  if display_flags["threshold"] and "UFT" in filter:
     (volts_now, volts_hist) = threshold["under-voltage"]
     (freq_now, freq_hist)   = threshold["arm-capped"]
     (throt_now, throt_hist) = threshold["throttled"]
@@ -1026,113 +1078,96 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
       dThrottled = "t"
       nThrottled = 2
 
-    LINE = "%s %s%s%s" % \
-             (LINE,
-              colourise(dVolts,     "%s", 1, 2, 3, False, compare=nVolts),
-              colourise(dFreq,      "%s", 1, 2, 3, False, compare=nFreq),
-              colourise(dThrottled, "%s", 1, 2, 3, False, compare=nThrottled))
+    uft = "%s%s%s" % (colourise(dVolts,     "%s", 1, 2, 3, False, compare=nVolts),
+                      colourise(dFreq,      "%s", 1, 2, 3, False, compare=nFreq),
+                      colourise(dThrottled, "%s", 1, 2, 3, False, compare=nThrottled))
+
+    LINE = addDetailValue(filter, "UFT", uft, LINE)
 
   limits = sysinfo["limits"]
   (arm_min, arm_max) = limits["arm"]
   (core_min, core_max) = limits["core"]
   (h264_min, h264_max) = limits["h264"]
+  (v3d_min, v3d_max) = limits["v3d"]
+  (isp_min, isp_max) = limits["isp"]
 
   fTC = "%5.2fC" if bcm2385[3] < 100000 else "%5.1fC"
   fTM = "%5.2fC" if bcm2385[4] < 100000 else "%5.1fC"
 
   if display_flags["core_volts"]:
-    LINE = "%s %s" % (LINE, bcm2385[7])
+    LINE = addDetailValue(filter, "Vcore", bcm2385[9], LINE)
 
-  LINE = "%s %s %s %s %s (%s)" % \
-           (LINE,
-            colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False),
-            colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False),
-            colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False),
-            colourise(bcm2385[3]/1000,    fTC,         50.0,     70.0,     80.0, False),
-            colourise(bcm2385[4]/1000,    fTM,         50.0,     70.0,     80.0, False))
+  LINE = addDetailValue(filter, "ARM",  colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False), LINE)
+  LINE = addDetailValue(filter, "Core", colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False), LINE)
+  LINE = addDetailValue(filter, "H264", colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False), LINE)
+  LINE = addDetailValue(filter, "V3D",  colourise(bcm2385[3]/1000000, "%4dMhz",       0,  v3d_min,  v3d_max, False), LINE)
+  LINE = addDetailValue(filter, "ISP",  colourise(bcm2385[4]/1000000, "%4dMhz",       0,  isp_min,  isp_max, False), LINE)
 
-  if display_flags["temp_pmic"]:
-    fTC = "%5.2fC" if bcm2385[5] < 100000 else "%5.1fC"
-    fTM = "%5.2fC" if bcm2385[6] < 100000 else "%5.1fC"
-    LINE = "%s %s (%s)" % \
-             (LINE,
-              colourise(bcm2385[5],    fTC,         50.0,     70.0,     80.0, False),
-              colourise(bcm2385[6],    fTM,         50.0,     70.0,     80.0, False))
+  if "TempCore" in filter:
+    LINE = addDetailValue(filter, "TempCore", colourise(bcm2385[5]/1000,    fTC,         50.0,     70.0,     80.0, False), LINE)
+    LINE = addDetailValue(filter, "TempCore", colourise(bcm2385[6]/1000,    fTM,         50.0,     70.0,     80.0, False), LINE, prefix='(', suffix=')')
 
-  LINE = "%s %s" % \
-           (LINE,
-            colourise(irq[0],             "%6s",        500,     2500,     5000, True))
+  if display_flags["temp_pmic"] and "TempPMIC" in filter:
+    fTC = "%5.2fC" if bcm2385[7] < 100000 else "%5.1fC"
+    fTM = "%5.2fC" if bcm2385[8] < 100000 else "%5.1fC"
+    LINE = addDetailValue(filter, "TempPMIC", colourise(bcm2385[7], fTC, 50.0, 70.0, 80.0, False), LINE)
+    LINE = addDetailValue(filter, "TempPMIC", colourise(bcm2385[8], fTM, 50.0, 70.0, 80.0, False), LINE, prefix='(', suffix=')')
+
+  LINE = addDetailValue(filter, "IRQ", colourise(irq[0], "%6s", 500, 2500, 5000, True), LINE)
 
   if display_flags["network"]:
     if display_flags["human_readable"]:
-      LINE = "%s %s %s" % \
-               (LINE,
-                colourise(network[0]/1024,         "%7s",     0.5e3,    2.5e3,    5.0e3, True),
-                colourise(network[1]/1024,         "%7s",     0.5e3,    2.5e3,    5.0e3, True))
+      LINE = addDetailValue(filter, "RX", colourise(int(network[0]/1024), "%7s", 0.5e3, 2.5e3, 5.0e3, True), LINE)
+      LINE = addDetailValue(filter, "TX", colourise(int(network[1]/1024), "%7s", 0.5e3, 2.5e3, 5.0e3, True), LINE)
     else:
-      LINE = "%s %s %s" % \
-               (LINE,
-                colourise(network[0],         "%11s",     0.5e6,    2.5e6,    5.0e6, True),
-                colourise(network[1],         "%11s",     0.5e6,    2.5e6,    5.0e6, True))
+      LINE = addDetailValue(filter, "RX", colourise(network[0],     "%11s", 0.5e6, 2.5e6, 5.0e6, True), LINE)
+      LINE = addDetailValue(filter, "TX", colourise(network[1],     "%11s", 0.5e6, 2.5e6, 5.0e6, True), LINE)
 
   if display_flags["utilisation"]:
-    LINE = "%s %s %s %s %s %s %s %s %s" % \
-             (LINE,
-              colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
-              colourise(cpuload[1], "%6.2f",    10, 20, 30, False),
-              colourise(cpuload[2], "%6.2f",    30, 50, 70, False),
-              colourise(cpuload[3], "%6.2f",    70, 50, 30, False),
-              colourise(cpuload[4], "%6.2f",     2,  5, 10, False),
-              colourise(cpuload[5], "%6.2f",     2,  5, 10, False),
-              colourise(cpuload[6], "%6.2f",   7.5, 15, 20, False),
-              colourise(cpuload[7], "%6.2f",    30, 50, 70, False))
+    LINE = addDetailValue(filter, "CPUuser",  colourise(cpuload[0], "%6.2f",  30, 50, 70, False), LINE)
+    LINE = addDetailValue(filter, "CPUnice",  colourise(cpuload[1], "%6.2f",  10, 20, 30, False), LINE)
+    LINE = addDetailValue(filter, "CPUsys",   colourise(cpuload[2], "%6.2f",  30, 50, 70, False), LINE)
+    LINE = addDetailValue(filter, "CPUidle",  colourise(cpuload[3], "%6.2f",  70, 50, 30, False), LINE)
+    LINE = addDetailValue(filter, "CPUiowt",  colourise(cpuload[4], "%6.2f",   2,  5, 10, False), LINE)
+    LINE = addDetailValue(filter, "CPUirq",   colourise(cpuload[5], "%6.2f",   2,  5, 10, False), LINE)
+    LINE = addDetailValue(filter, "CPUs/irq", colourise(cpuload[6], "%6.2f", 7.5, 15, 20, False), LINE)
+    LINE = addDetailValue(filter, "CPUtotal", colourise(cpuload[7], "%6.2f",  30, 50, 70, False), LINE)
 
   if display_flags["sutilisation"]:
-    LINE = "%s %s %s %s %s" % \
-             (LINE,
-              colourise(cpuload[0], "%6.2f",    30, 50, 70, False),
-              colourise(cpuload[1], "%6.2f",    10, 20, 30, False),
-              colourise(cpuload[2], "%6.2f",    30, 50, 70, False),
-              colourise(cpuload[3], "%6.2f",    30, 50, 70, False))
+    LINE = addDetailValue(filter, "CPUuser",  colourise(cpuload[0], "%6.2f",  30, 50, 70, False), LINE)
+    LINE = addDetailValue(filter, "CPUnice",  colourise(cpuload[1], "%6.2f",  10, 20, 30, False), LINE)
+    LINE = addDetailValue(filter, "CPUsys",   colourise(cpuload[2], "%6.2f",  30, 50, 70, False), LINE)
+    LINE = addDetailValue(filter, "CPUtotal", colourise(cpuload[3], "%6.2f",  30, 50, 70, False), LINE)
 
-  if display_flags["cpu_cores"]:
+  if display_flags["cpu_cores"] and "CPU" in filter:
     for core in cores:
-      LINE = "%s %s" % (LINE, colourise(core[1], "%6.2f",    30, 50, 70, False))
+      LINE = addDetailValue(filter, "CPU", colourise(core[1], "%6.2f", 30, 50, 70, False), LINE)
 
   if display_flags["gpu_malloc"]:
     data = gpumem["malloc"]
-    LINE = "%s %s (%s)" % \
-             (LINE,
-              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
-              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
+    LINE = addDetailValue(filter, "GPUfree", colourise(data[0],   "%4s", 70, 50, 30, False, compare=data[2]), LINE)
+    LINE = addDetailValue(filter, "GPUfree", colourise(data[2], "%3d%%", 70, 50, 30, False, compare=data[2]), LINE, prefix='(', suffix=')')
 
   if display_flags["gpu_reloc"]:
     data = gpumem["reloc"]
-    LINE = "%s %s (%s)" % \
-             (LINE,
-              colourise(data[0],  "%4s",   70, 50, 30, False, compare=data[2]),
-              colourise(data[2],  "%3d%%", 70, 50, 30, False, compare=data[2]))
+    LINE = addDetailValue(filter, "GPUfree", colourise(data[0],   "%4s", 70, 50, 30, False, compare=data[2]), LINE)
+    LINE = addDetailValue(filter, "GPUfree", colourise(data[2], "%3d%%", 70, 50, 30, False, compare=data[2]), LINE, prefix='(', suffix=')')
 
   if display_flags["cpu_mem"]:
 
     if display_flags["human_readable"]:
-      LINE = "%s %s / %s" % \
-               (LINE,
-                colourise(memory[1]/1024,  "%9s",      60, 75, 85, True,  compare=memory[2]),
-                colourise(memory[2],       "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
+      data = "%s / %s" % (colourise(int(memory[1]/1024),     "%9s", 60, 75, 85, True,  compare=memory[2]),
+                          colourise(memory[2],           "%4.1f%%", 60, 75, 85, False, compare=memory[2]))
     else :
-      LINE = "%s %s / %s" % \
-               (LINE,
-                colourise(memory[1],  "%9s",      60, 75, 85, True,  compare=memory[2]),
-                colourise(memory[2],  "%4.1f%%",  60, 75, 85, False, compare=memory[2]))
+      data = "%s / %s" % (colourise(memory[1],      "%9s", 60, 75, 85, True,  compare=memory[2]),
+                          colourise(memory[2],  "%4.1f%%", 60, 75, 85, False, compare=memory[2]))
+    LINE = addDetailValue(filter, "MEMfree", data, LINE)
 
     # Swap memory
     if display_flags["swap"] and memory[4] is not None:
-      LINE = "%s(%s)" % \
-              (LINE,
-               colourise(memory[4],  "%4.1f%%",  1,  5, 15, False, compare=memory[4]))
+      LINE = addDetailValue(filter, "MEMfree", colourise(memory[4], "%4.1f%%", 1, 5, 15, False, compare=memory[4]), LINE, padding='', prefix='(', suffix=')')
 
-  if display_flags["deltas"]:
+  if display_flags["deltas"] and "MEMdelta" in filter:
     dmem = deltas[0]
     dgpu = deltas[1]
 
@@ -1150,12 +1185,10 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     else:
       cgpu = 0
 
-    LINE = "%s %s %s" % \
-             (LINE,
-              colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True),
-              colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True))
+    LINE = addDetailValue(filter, "MEMdelta", colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True), LINE)
+    LINE = addDetailValue(filter, "MEMdelta", colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True), LINE)
 
-  if display_flags["accumulated"]:
+  if display_flags["accumulated"] and "MEMaccum" in filter:
     dmem = deltas[2]
     dgpu = deltas[3]
 
@@ -1173,15 +1206,13 @@ def ShowStats(display_flags, sysinfo, threshold, bcm2385, irq, network, cpuload,
     else:
       cgpu = 0
 
-    LINE = "%s %s %s" % \
-             (LINE,
-              colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True),
-              colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True))
+    LINE = addDetailValue(filter, "MEMaccum", colourise(dgpu, "%12s",  1, None, 2, True, compare=cgpu, addSign=True), LINE)
+    LINE = addDetailValue(filter, "MEMaccum", colourise(dmem, "%10s",  1, None, 2, True, compare=cmem, addSign=True), LINE)
 
   printn("\n%s" % LINE)
 
 def ShowHelp():
-  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [k] [L|N|M] [y|Y] [x|X|r|R] [p|P] [T] [t] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
+  print("Usage: %s [c|m] [d#] [H#] [i <iface>] [k] [L|N|M] [o[-+]col,...] [y|Y] [x|X|r|R] [p|P] [T] [t] [g|G] [f|F] [D][A] [s|S] [q|Q] [V|U|W|C] [Z] [h]" % os.path.basename(__file__))
   print()
   print("c        Colourise output (white: minimal load or usage, then ascending through green, amber and red).")
   print("m        Monochrome output (no colourise)")
@@ -1193,6 +1224,11 @@ def ShowHelp():
   print("L        Run at lowest priority (nice +20) - default")
   print("N        Run at normal priority (nice 0)")
   print("M        Run at maximum priority (nice -20)")
+  print("o cols   Comma delimited list of columns to display. Prefix column name with - to hide a column, and + to add a column. Use no prefix to replace all default columns. Column names are case-sensitive.")
+  print("         eg. \"-o-RX,-TX\" to hide both RX and TX, while continuing to show all other default columns.")
+  print("         eg. \"-o+V3D,+ISP,-H264\" to show V3D and ISP columns, hide H264, and continue to show all other default columns.")
+  print("         eg. \"-oRX,TX\" to show only RX and TX (ignore other -col/+col definitions, and disable default columns).")
+  print("         Available columns: %s" % ", ".join(DEFAULT_COLS_FILTER + EXTRA_COLS_FILTER))
   print("y/Y      Do (y)/don't (Y) show threshold event flags (U=under-voltage, F=ARM freq capped, T=currently throttled, lowercase if event has occurred in the past")
   print("r/R      Do (r)/don't (R) monitor simple CPU load and memory usage stats (not compatible with x/X)")
   print("x/X      Do (x)/don't (X) monitor detailed CPU load and memory usage stats (not compatible with r/R)")
@@ -1361,6 +1397,7 @@ def main(args):
   QUIET = False
   NICE_ADJUST = +20
   INCLUDE_SWAP = True
+  COLUMN_FILTER = list(DEFAULT_COLS_FILTER)
 
   STATS_THRESHOLD = False
   STATS_THRESHOLD_CLEAR = False
@@ -1424,7 +1461,7 @@ def main(args):
       argp[i] = t
     else:
       argp.append((x,""))
-      VALUE = x in ["i", "d", "h"]
+      VALUE = x in ["i", "o", "d", "h"]
       i += 1
 
   del argp[0]
@@ -1446,6 +1483,34 @@ def main(args):
 
     elif a1 == "i":
       INTERFACE = a2
+
+    elif a1 == "o":
+      newCols = []
+      invalidCols = []
+      ALL_COLS = DEFAULT_COLS_FILTER + EXTRA_COLS_FILTER
+      for column in a2.split(","):
+        if column:
+          if column.startswith("-"):
+            colname = column[1:]
+            if colname in COLUMN_FILTER:
+              COLUMN_FILTER.remove(colname)
+          elif column.startswith("+"):
+            colname = column[1:]
+            if colname not in COLUMN_FILTER:
+              COLUMN_FILTER.append(colname)
+          else:
+            colname = column
+            newCols.append(column)
+
+          if colname and colname not in ALL_COLS:
+            invalidCols.append(colname)
+
+      if invalidCols:
+        print("Unknown column(s) specified: %s" % ", ".join(sorted(set(invalidCols))))
+        sys.exit(2)
+
+      if newCols:
+        COLUMN_FILTER = newCols
 
     elif a1 == "L":
       NICE_ADJUST = +20
@@ -1609,15 +1674,15 @@ def main(args):
   DELTAS=[(0, None), (0, None), (0, None)]
 
   if STATS_THRESHOLD:
-    HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
+    HARDWARE.GetThresholdValues(UFT, COLUMN_FILTER, STATS_THRESHOLD_CLEAR)
 
-  getBCM283X(BCM, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
-  if BCM[1][1][5] == None:
+  getBCM283X(BCM, COLUMN_FILTER, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
+  if BCM[1][1][7] == None:
     STATS_WITH_PMIC_TEMP = False
 
-  getIRQ(IRQ, sysinfo)
+  getIRQ(IRQ, COLUMN_FILTER, sysinfo)
 
-  getNetwork(NET, INTERFACE)
+  getNetwork(NET, COLUMN_FILTER, INTERFACE)
 
   STATS_NETWORK = (NET[1][1] != "")
 
@@ -1626,16 +1691,16 @@ def main(args):
     STATS_GPU_R = True
 
   if STATS_CPU_CORE or STATS_UTILISATION or SIMPLE_UTILISATION:
-    getProcStats(PROC)
+    getProcStats(PROC, COLUMN_FILTER)
 
   if STATS_CPU_MEM:
-    getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+    getMemory(MEM, COLUMN_FILTER, (SWAP_ENABLED and INCLUDE_SWAP))
 
   if STATS_GPU_R or STATS_GPU_M:
-    getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
+    getGPUMem(GPU, COLUMN_FILTER, STATS_GPU_R, STATS_GPU_M)
 
   if STATS_DELTAS or STATS_ACCUMULATED:
-    getMemDeltas(DELTAS, MEM, GPU)
+    getMemDeltas(DELTAS, COLUMN_FILTER, MEM, GPU)
 
   count = HDREVERY
   tcount = 0
@@ -1664,44 +1729,44 @@ def main(args):
   while [ True ]:
     if HDREVERY != 0 and count >= HDREVERY:
       if not QUIET or not firsthdr: printn("\n\n")
-      ShowHeadings(display_flags, sysinfo)
+      ShowHeadings(COLUMN_FILTER, display_flags, sysinfo)
       firsthdr = False
       count = 0
     count += 1
     tcount += 1
 
     if STATS_THRESHOLD:
-      HARDWARE.GetThresholdValues(UFT, STATS_THRESHOLD_CLEAR)
+      HARDWARE.GetThresholdValues(UFT, COLUMN_FILTER, STATS_THRESHOLD_CLEAR)
 
-    getBCM283X(BCM, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
+    getBCM283X(BCM, COLUMN_FILTER, STATS_WITH_VOLTS, STATS_WITH_PMIC_TEMP)
 
-    getIRQ(IRQ, sysinfo)
+    getIRQ(IRQ, COLUMN_FILTER, sysinfo)
 
     if STATS_NETWORK:
-      getNetwork(NET, INTERFACE)
+      getNetwork(NET, COLUMN_FILTER, INTERFACE)
 
     if STATS_CPU_CORE or STATS_UTILISATION or SIMPLE_UTILISATION:
-      getProcStats(PROC)
+      getProcStats(PROC, COLUMN_FILTER)
 
     if STATS_CPU_CORE:
-      getCoreStats(CORE, PROC)
+      getCoreStats(CORE, COLUMN_FILTER, PROC)
 
     if STATS_UTILISATION:
-      getCPULoad(CPU, PROC, sysinfo)
+      getCPULoad(CPU, COLUMN_FILTER, PROC, sysinfo)
 
     if SIMPLE_UTILISATION:
-      getSimpleCPULoad(CPU, PROC, sysinfo)
+      getSimpleCPULoad(CPU, COLUMN_FILTER, PROC, sysinfo)
 
     if STATS_CPU_MEM:
-      getMemory(MEM, (SWAP_ENABLED and INCLUDE_SWAP))
+      getMemory(MEM, COLUMN_FILTER, (SWAP_ENABLED and INCLUDE_SWAP))
 
     if STATS_GPU_R or STATS_GPU_M:
-      getGPUMem(GPU, STATS_GPU_R, STATS_GPU_M)
+      getGPUMem(GPU, COLUMN_FILTER, STATS_GPU_R, STATS_GPU_M)
 
     if STATS_DELTAS or STATS_ACCUMULATED:
-      getMemDeltas(DELTAS, MEM, GPU)
+      getMemDeltas(DELTAS, COLUMN_FILTER, MEM, GPU)
 
-    ShowStats(display_flags, sysinfo, UFT[0][1], BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
+    ShowStats(COLUMN_FILTER, display_flags, sysinfo, UFT[0][1], BCM[0][1], IRQ[0][1], NET[0][1], CPU[0][1], MEM[0][1], GPU[0][1], CORE[0][1], DELTAS[0][1])
 
     n = {}
     n["01#IRQ"] = IRQ[0][1][0] if IRQ[0][1][0] > PEAKVALUES["01#IRQ"] else PEAKVALUES["01#IRQ"]

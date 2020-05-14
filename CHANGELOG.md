@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.5.5 (14/05/2020)
+* Add: configure columns with `-o` option. Closes #17
+* Add: V3D and ISP frequency support (enable via `-o+V3D,+ISP`). Closes #19
+
 ## Version 0.5.4 (22/02/2020)
 * Add: Exit after n iterations option, J# (#18)
 
