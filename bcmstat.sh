@@ -43,7 +43,7 @@ else:
   import urllib2
 
 GITHUB = "https://raw.github.com/MilhouseVH/bcmstat/master"
-VERSION = "0.5.5"
+VERSION = "0.5.6"
 
 VCGENCMD = None
 VCDBGCMD = None
@@ -771,10 +771,10 @@ def getsysinfo(HARDWARE):
 
   VCG_INT = vcgencmd_items("get_config int", isInt=True)
 
-  CORE_DEFAULT_IDLE = CORE_DEFAULT_BUSY = 250
-  H264_DEFAULT_IDLE = H264_DEFAULT_BUSY = 250
-  V3D_DEFAULT_IDLE = V3D_DEFAULT_BUSY = 250
-  ISP_DEFAULT_IDLE = ISP_DEFAULT_BUSY = 250
+  CORE_DEFAULT_IDLE = CORE_DEFAULT_BUSY = VCG_INT.get("core_freq_min", VCG_INT.get("gpu_freq_min", 250))
+  H264_DEFAULT_IDLE = H264_DEFAULT_BUSY = VCG_INT.get("h264_freq_min", VCG_INT.get("gpu_freq_min", 250))
+  V3D_DEFAULT_IDLE = V3D_DEFAULT_BUSY = VCG_INT.get("v3d_freq_min", VCG_INT.get("gpu_freq_min", 250))
+  ISP_DEFAULT_IDLE = ISP_DEFAULT_BUSY = VCG_INT.get("isp_freq_min", VCG_INT.get("gpu_freq_min", 250))
 
   if VCG_INT.get("disable_auto_turbo", 0) == 0:
     CORE_DEFAULT_BUSY += 50
@@ -1100,7 +1100,7 @@ def ShowStats(filter, display_flags, sysinfo, threshold, bcm2385, irq, network, 
   LINE = addDetailValue(filter, "ARM",  colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False), LINE)
   LINE = addDetailValue(filter, "Core", colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False), LINE)
   LINE = addDetailValue(filter, "H264", colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False), LINE)
-  LINE = addDetailValue(filter, "V3D",  colourise(bcm2385[3]/1000000, "%4dMhz",       0,  v3d_min,  v3d_max, False), LINE)
+  LINE = addDetailValue(filter, "V3D",  colourise(bcm2385[3]/1000000, "%4dMhz", v3d_min,     None,  v3d_max, False), LINE)
   LINE = addDetailValue(filter, "ISP",  colourise(bcm2385[4]/1000000, "%4dMhz",       0,  isp_min,  isp_max, False), LINE)
 
   if "TempCore" in filter:
