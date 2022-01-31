@@ -1099,8 +1099,8 @@ def ShowStats(filter, display_flags, sysinfo, threshold, bcm2385, irq, network, 
 
   LINE = addDetailValue(filter, "ARM",  colourise(bcm2385[0]/1000000, "%4dMhz", arm_min,     None,  arm_max, False), LINE)
   LINE = addDetailValue(filter, "Core", colourise(bcm2385[1]/1000000, "%4dMhz",core_min,     None, core_max, False), LINE)
-  LINE = addDetailValue(filter, "V3D",  colourise(bcm2385[3]/1000000, "%4dMhz", v3d_min,     None,  v3d_max, False), LINE)
   LINE = addDetailValue(filter, "H264", colourise(bcm2385[2]/1000000, "%4dMhz",       0, h264_min, h264_max, False), LINE)
+  LINE = addDetailValue(filter, "V3D",  colourise(bcm2385[3]/1000000, "%4dMhz", v3d_min,     None,  v3d_max, False), LINE)
   LINE = addDetailValue(filter, "ISP",  colourise(bcm2385[4]/1000000, "%4dMhz",       0,  isp_min,  isp_max, False), LINE)
 
   if "TempCore" in filter:
