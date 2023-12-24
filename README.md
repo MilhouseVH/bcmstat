@@ -26,7 +26,7 @@ Specify a default configuration in ~/.bcmstat.conf, eg:
 xgd10
 ```
 
-####Installing on the Pi:
+### Installing on the Pi
 
 To install the latest version directly from this github repository:
 ```
@@ -34,7 +34,7 @@ curl -Ls https://raw.githubusercontent.com/MilhouseVH/bcmstat/master/bcmstat.sh 
 chmod +x ~/bcmstat.sh
 ```
 
-######Example output:
+### Example output
 ```
 rpi2:~ # ./bcmstat.sh xgpd10
   Config: v0.3.7, args "Cxgpd10", priority lowest (+19)
@@ -66,7 +66,7 @@ Time         ARM    Core    H264 Core Temp (Max)  IRQ/s     RX B/s     TX B/s  %
 11:00:30  999Mhz  500Mhz    0Mhz 48.69C (49.77C)    694        456        774   4.77   0.74   1.69  92.20   0.00   0.00   0.02   7.80   9.24   1.79   3.08  17.18 242M ( 80%) 588,504 kB/14.8%
 ```
 
-###### With "leak detection" showing potential GPU and ARM memory leak:
+### With "leak detection" showing potential GPU and ARM memory leak
 
 Notice how negative allocations exceed the positive frees.
 ```
